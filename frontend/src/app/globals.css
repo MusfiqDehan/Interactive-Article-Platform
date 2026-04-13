@@ -102,6 +102,40 @@
   box-shadow: 0 0 0 3px rgba(59,130,246,0.35) !important;
 }
 
+/* Editor.js drag handle (6-dot icon) — light theme */
+.ce-toolbar__settings-btn {
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 8px !important;
+  color: #64748b !important;
+  transition: background-color 0.15s, color 0.15s !important;
+}
+
+.ce-toolbar__settings-btn:hover {
+  background-color: #e2e8f0 !important;
+  color: #1e293b !important;
+}
+
+.ce-toolbar__settings-btn svg {
+  width: 16px !important;
+  height: 16px !important;
+  fill: currentColor !important;
+}
+
+/* Editor.js drag handle (6-dot icon) — dark theme */
+.dark .ce-toolbar__settings-btn {
+  color: #94a3b8 !important;
+}
+
+.dark .ce-toolbar__settings-btn:hover {
+  background-color: #334155 !important;
+  color: #f1f5f9 !important;
+}
+
+.dark .ce-toolbar__settings-btn svg {
+  fill: currentColor !important;
+}
+
 /* Editor.js toolbox (block picker) — light theme */
 .ce-toolbox {
   background-color: #ffffff !important;
