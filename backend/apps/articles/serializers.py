@@ -11,7 +11,9 @@ User = get_user_model()
 ALLOWED_BLOCK_TYPES = {
     "paragraph", "header", "image", "video", "audio", "youtube", "embed",
     "quote", "list", "delimiter", "table", "code", "warning",
-    "interactive_text", "interactive_image", "raw",
+    "interactive_text", "interactive_image",
+    "interactive_audio", "interactive_video", "interactive_youtube",
+    "raw",
 }
 
 
@@ -22,7 +24,7 @@ def sanitize_block_text(text):
     return nh3.clean(
         text,
         tags={"b", "i", "u", "a", "br", "em", "strong", "mark", "code", "span"},
-        attributes={"a": {"href", "target", "rel"}, "span": {"class", "data-modal-id"}},
+        attributes={"a": {"href", "target", "rel"}, "span": {"class", "data-modal-id", "data-annotation-id", "data-annotation-icon"}},
     )
 
 
