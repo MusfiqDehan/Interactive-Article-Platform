@@ -24,8 +24,18 @@ def sanitize_block_text(text):
     return nh3.clean(
         text,
         tags={"b", "i", "u", "a", "br", "em", "strong", "mark", "code", "span"},
-        attributes={"a": {"href", "target", "rel"}, "span": {"class", "data-modal-id", "data-annotation-id", "data-annotation-icon"}},
+        attributes={"a": {"href", "target"}, "span": {"class", "data-modal-id", "data-annotation-id", "data-annotation-icon"}},
     )
+
+
+def sanitize_block_value(value):
+    if isinstance(value, str):
+        return sanitize_block_text(value)
+    if isinstance(value, list):
+        return [sanitize_block_value(item) for item in value]
+    if isinstance(value, dict):
+        return {key: sanitize_block_value(val) for key, val in value.items()}
+    return value
 
 
 def validate_blocks(content):
@@ -37,26 +47,42 @@ def validate_blocks(content):
     if not isinstance(blocks, list):
         raise serializers.ValidationError("Content 'blocks' must be a list.")
 
+    sanitized_blocks = []
     for block in blocks:
+        if not isinstance(block, dict):
+            continue
+
         block_type = block.get("type")
-        if block_type not in ALLOWED_BLOCK_TYPES:
-            raise serializers.ValidationError(f"Block type '{block_type}' is not allowed.")
+        if not isinstance(block_type, str) or not block_type:
+            continue
 
         data = block.get("data", {})
-        if "text" in data:
-            data["text"] = sanitize_block_text(data["text"])
+        if not isinstance(data, dict):
+            data = {}
 
-        # Sanitize caption for media blocks
-        if "caption" in data:
-            data["caption"] = sanitize_block_text(data["caption"])
+        sanitized_block = {
+            "type": block_type,
+            "data": sanitize_block_value(data),
+        }
+        if "id" in block:
+            sanitized_block["id"] = block.get("id")
+        sanitized_blocks.append(sanitized_block)
 
-        # Sanitize list items
-        if block_type == "list" and "items" in data:
-            data["items"] = [
-                sanitize_block_text(item) if isinstance(item, str) else item
-                for item in data["items"]
-            ]
+    if not sanitized_blocks:
+        content["blocks"] = []
+        return content
 
+    unknown_block_types = {
+        block.get("type")
+        for block in sanitized_blocks
+        if block.get("type") not in ALLOWED_BLOCK_TYPES
+    }
+    if unknown_block_types:
+        raise serializers.ValidationError(
+            f"Unsupported block type(s): {', '.join(sorted(unknown_block_types))}."
+        )
+
+    content["blocks"] = sanitized_blocks
     return content
 
 
@@ -94,6 +120,8 @@ class ArticleDetailSerializer(serializers.ModelSerializer):
 
 
 class ArticleCreateUpdateSerializer(serializers.ModelSerializer):
+    featured_image = serializers.URLField(required=False, allow_blank=True, allow_null=True)
+
     class Meta:
         model = Article
         fields = (
@@ -103,6 +131,9 @@ class ArticleCreateUpdateSerializer(serializers.ModelSerializer):
 
     def validate_content(self, value):
         return validate_blocks(value)
+
+    def validate_featured_image(self, value):
+        return value or ""
 
     def create(self, validated_data):
         validated_data["author"] = self.context["request"].user
