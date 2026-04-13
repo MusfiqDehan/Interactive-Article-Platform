@@ -3,10 +3,13 @@ from rest_framework.routers import DefaultRouter
 
 from . import views
 
-router = DefaultRouter()
-router.register(r"", views.CategoryViewSet, basename="category")
-router.register(r"subcategories", views.SubCategoryViewSet, basename="subcategory")
+category_router = DefaultRouter()
+category_router.register(r"", views.CategoryViewSet, basename="category")
+
+subcategory_router = DefaultRouter()
+subcategory_router.register(r"", views.SubCategoryViewSet, basename="subcategory")
 
 urlpatterns = [
-    path("", include(router.urls)),
+    path("subcategories/", include(subcategory_router.urls)),
+    path("", include(category_router.urls)),
 ]
