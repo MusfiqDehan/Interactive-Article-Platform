@@ -13,6 +13,10 @@ const nextConfig = {
         hostname: "backend",
         port: "8003",
       },
+      {
+        protocol: "https",
+        hostname: "interactive-articles-api.musfiqdehan.com",
+      },
     ],
   },
 };
