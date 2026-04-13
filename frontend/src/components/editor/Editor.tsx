@@ -27,6 +27,7 @@ export default function Editor({ data, onChange, holder }: EditorProps) {
     const CodeTool = (await import("@editorjs/code")).default;
     const InlineCode = (await import("@editorjs/inline-code")).default;
     const Marker = (await import("@editorjs/marker")).default;
+    const InteractiveInlineTool = (await import("./InteractiveInlineTool")).default;
     const AudioTool = (await import("./AudioTool")).default;
     const VideoTool = (await import("./VideoTool")).default;
     const InteractiveTextTool = (await import("./InteractiveTextTool")).default;
@@ -114,6 +115,9 @@ export default function Editor({ data, onChange, holder }: EditorProps) {
         },
         marker: {
           class: Marker,
+        },
+        interactiveAnnotation: {
+          class: InteractiveInlineTool,
         },
         interactive_text: {
           class: InteractiveTextTool,
