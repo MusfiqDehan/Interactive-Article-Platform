@@ -1,0 +1,98 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ia-backend
+    env_file: .env.prod
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings.production
+    expose:
+      - "8003"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - backend_static:/app/staticfiles
+      - backend_media:/app/media
+    networks:
+      - iap_network
+      - traefik_proxy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; req=urllib.request.Request('http://localhost:8003/admin/login/', headers={'Host':'interactive-articles-api.musfiqdehan.com'}); urllib.request.urlopen(req)"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik_proxy"
+      - "traefik.http.routers.ia-backend.rule=Host(`interactive-articles-api.musfiqdehan.com`)"
+      - "traefik.http.routers.ia-backend.entrypoints=websecure"
+      - "traefik.http.routers.ia-backend.tls=true"
+      - "traefik.http.services.ia-backend.loadbalancer.server.port=8003"
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=https://interactive-articles-api.musfiqdehan.com/api
+        - NEXT_PUBLIC_API_BASE_URL=https://interactive-articles-api.musfiqdehan.com/api
+    container_name: ia-frontend
+    environment:
+      - NODE_ENV=production
+      - HOSTNAME=0.0.0.0
+      - PORT=3003
+      - NEXT_PUBLIC_API_URL=https://interactive-articles-api.musfiqdehan.com/api
+      - NEXT_PUBLIC_API_BASE_URL=https://interactive-articles-api.musfiqdehan.com/api
+    expose:
+      - "3003"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - iap_network
+      - traefik_proxy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3003/login"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik_proxy"
+      - "traefik.http.routers.ia-frontend.rule=Host(`interactive-articles.musfiqdehan.com`)"
+      - "traefik.http.routers.ia-frontend.entrypoints=websecure"
+      - "traefik.http.routers.ia-frontend.tls=true"
+      - "traefik.http.services.ia-frontend.loadbalancer.server.port=3003"
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    container_name: ia-db
+    env_file: .env.prod
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - iap_network
+      - traefik_proxy
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  backend_static:
+  backend_media:
+
+networks:
+  iap_network:
+    driver: bridge
+  traefik_proxy:
+    external: true

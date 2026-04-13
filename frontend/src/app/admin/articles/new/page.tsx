@@ -17,6 +17,66 @@ const Editor = dynamic_import(() => import("@/components/editor/Editor"), {
   ),
 });
 
+function normalizeEditorData(data: OutputData): OutputData {
+  const blocks = Array.isArray(data?.blocks)
+    ? data.blocks.filter(
+        (block): block is NonNullable<OutputData["blocks"]>[number] =>
+          Boolean(
+            block &&
+              typeof block === "object" &&
+              typeof block.type === "string" &&
+              block.type.trim().length > 0 &&
+              block.data &&
+              typeof block.data === "object"
+          )
+      )
+    : [];
+
+  return {
+    ...data,
+    blocks,
+  };
+}
+
+function getApiErrorMessage(err: unknown, fallback: string): string {
+  const axiosErr = err as {
+    message?: string;
+    response?: { status?: number; data?: unknown };
+  };
+
+  if (axiosErr.response?.data) {
+    if (typeof axiosErr.response.data === "string") {
+      return axiosErr.response.data;
+    }
+
+    if (typeof axiosErr.response.data === "object") {
+      const entries = Object.entries(
+        axiosErr.response.data as Record<string, unknown>
+      );
+      if (entries.length > 0) {
+        return entries
+          .map(([key, val]) => {
+            if (Array.isArray(val)) {
+              return `${key}: ${val.join(", ")}`;
+            }
+            return `${key}: ${String(val)}`;
+          })
+          .join("; ");
+      }
+    }
+  }
+
+  if (axiosErr.message) {
+    return `${fallback}: ${axiosErr.message}`;
+  }
+
+  if (axiosErr.response?.status) {
+    return `${fallback} (HTTP ${axiosErr.response.status})`;
+  }
+
+  return fallback;
+}
+
 export default function NewArticlePage() {
   const router = useRouter();
 
@@ -79,26 +139,18 @@ export default function NewArticlePage() {
       const payload: Record<string, unknown> = {
         title,
         excerpt,
-        featured_image: featuredImage || null,
+        featured_image: featuredImage.trim(),
         category: categoryId,
         subcategory: subcategoryId || null,
         status,
         is_featured: isFeatured,
-        content: editorData,
+        content: normalizeEditorData(editorData),
       };
 
       await api.post("/articles/", payload);
       router.push("/admin/articles");
     } catch (err: unknown) {
-      const axiosErr = err as { response?: { data?: Record<string, string[]> } };
-      if (axiosErr.response?.data) {
-        const messages = Object.entries(axiosErr.response.data)
-          .map(([key, val]) => `${key}: ${Array.isArray(val) ? val.join(", ") : val}`)
-          .join("; ");
-        setError(messages);
-      } else {
-        setError("Failed to create article");
-      }
+      setError(getApiErrorMessage(err, "Failed to create article"));
     } finally {
       setSaving(false);
     }
@@ -299,19 +351,20 @@ export default function NewArticlePage() {
           <h3 className="font-medium text-blue-800 dark:text-blue-300 mb-2">
             Interactive Content Tips
           </h3>
-          <p className="text-sm text-blue-600 dark:text-blue-400">
-            After saving, you can add interactive elements (text annotations with
-            modals, image hotspots) by editing the article&apos;s JSON content
-            directly. Use block types{" "}
-            <code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">
-              interactive_text
-            </code>{" "}
-            and{" "}
-            <code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">
-              interactive_image
-            </code>{" "}
-            with their respective annotation/hotspot data.
-          </p>
+          <ul className="text-sm text-blue-600 dark:text-blue-400 space-y-1 list-disc list-inside">
+            <li>
+              Use the <strong>Interactive Text</strong> block to type a paragraph, then{" "}
+              <strong>select any words</strong> to attach a text explanation, image, audio, video, or YouTube embed — a blue highlight and 🔍 icon will appear on those words.
+            </li>
+            <li>
+              Use the <strong>Interactive Image</strong> block to upload an image and{" "}
+              <strong>click directly on it</strong> to place clickable hotspot regions.
+            </li>
+            <li>
+              Use <strong>Interactive Audio</strong>, <strong>Interactive Video</strong>, or{" "}
+              <strong>Interactive YouTube</strong> blocks to attach timed chapters that open info modals.
+            </li>
+          </ul>
         </div>
 
         {/* Actions */}

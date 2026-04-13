@@ -29,6 +29,11 @@ export default function Editor({ data, onChange, holder }: EditorProps) {
     const Marker = (await import("@editorjs/marker")).default;
     const AudioTool = (await import("./AudioTool")).default;
     const VideoTool = (await import("./VideoTool")).default;
+    const InteractiveTextTool = (await import("./InteractiveTextTool")).default;
+    const InteractiveImageTool = (await import("./InteractiveImageTool")).default;
+    const InteractiveAudioTool = (await import("./InteractiveAudioTool")).default;
+    const InteractiveVideoTool = (await import("./InteractiveVideoTool")).default;
+    const InteractiveYouTubeTool = (await import("./InteractiveYouTubeTool")).default;
 
     const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8003/api";
     const tokens = typeof window !== "undefined" ? localStorage.getItem("tokens") : null;
@@ -109,6 +114,48 @@ export default function Editor({ data, onChange, holder }: EditorProps) {
         },
         marker: {
           class: Marker,
+        },
+        interactive_text: {
+          class: InteractiveTextTool,
+        },
+        interactive_image: {
+          class: InteractiveImageTool,
+          config: {
+            endpoints: {
+              byFile: `${apiBaseUrl}/media/upload/`,
+            },
+            additionalRequestHeaders: {
+              Authorization: `Bearer ${accessToken}`,
+            },
+            field: "image",
+          },
+        },
+        interactive_audio: {
+          class: InteractiveAudioTool,
+          config: {
+            endpoints: {
+              byFile: `${apiBaseUrl}/media/upload/`,
+            },
+            additionalRequestHeaders: {
+              Authorization: `Bearer ${accessToken}`,
+            },
+            field: "file",
+          },
+        },
+        interactive_video: {
+          class: InteractiveVideoTool,
+          config: {
+            endpoints: {
+              byFile: `${apiBaseUrl}/media/upload/`,
+            },
+            additionalRequestHeaders: {
+              Authorization: `Bearer ${accessToken}`,
+            },
+            field: "file",
+          },
+        },
+        interactive_youtube: {
+          class: InteractiveYouTubeTool,
         },
       },
       onChange: async () => {

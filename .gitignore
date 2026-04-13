@@ -19,6 +19,8 @@ eggs/
 lib/
 !frontend/lib/
 !frontend/lib/**
+!frontend/src/lib/
+!frontend/src/lib/**
 lib64/
 parts/
 sdist/
@@ -153,6 +155,7 @@ activemq-data/
 
 # Environments
 .env
+.env.prod
 .envrc
 .venv
 env/
