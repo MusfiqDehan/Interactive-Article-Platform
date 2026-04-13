@@ -37,8 +37,8 @@ const config: Config = {
         },
       },
       fontFamily: {
-        sans: ["Inter", "system-ui", "sans-serif"],
-        display: ["Cal Sans", "Inter", "system-ui", "sans-serif"],
+        sans: ["var(--font-hind-siliguri)", "Hind Siliguri", "system-ui", "sans-serif"],
+        display: ["var(--font-hind-siliguri)", "Hind Siliguri", "system-ui", "sans-serif"],
       },
     },
   },

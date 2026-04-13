@@ -63,7 +63,7 @@ export default function AdminCategoriesPage() {
     setError("");
     try {
       if (editingCat) {
-        await api.put(`/categories/${editingCat.id}/`, {
+        await api.put(`/categories/${editingCat.slug}/`, {
           name: catName,
           description: catDescription,
         });
@@ -82,10 +82,10 @@ export default function AdminCategoriesPage() {
     }
   };
 
-  const deleteCat = async (id: number) => {
+  const deleteCat = async (slug: string) => {
     if (!confirm("Delete this category and all its subcategories?")) return;
     try {
-      await api.delete(`/categories/${id}/`);
+      await api.delete(`/categories/${slug}/`);
       fetchCategories();
     } catch {
       setError("Failed to delete category");
@@ -218,7 +218,7 @@ export default function AdminCategoriesPage() {
                     <Edit2 className="w-4 h-4 text-slate-600 dark:text-slate-400" />
                   </button>
                   <button
-                    onClick={() => deleteCat(cat.id)}
+                    onClick={() => deleteCat(cat.slug)}
                     className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition"
                   >
                     <Trash2 className="w-4 h-4 text-red-500" />

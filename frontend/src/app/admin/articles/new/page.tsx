@@ -17,6 +17,66 @@ const Editor = dynamic_import(() => import("@/components/editor/Editor"), {
   ),
 });
 
+function normalizeEditorData(data: OutputData): OutputData {
+  const blocks = Array.isArray(data?.blocks)
+    ? data.blocks.filter(
+        (block): block is NonNullable<OutputData["blocks"]>[number] =>
+          Boolean(
+            block &&
+              typeof block === "object" &&
+              typeof block.type === "string" &&
+              block.type.trim().length > 0 &&
+              block.data &&
+              typeof block.data === "object"
+          )
+      )
+    : [];
+
+  return {
+    ...data,
+    blocks,
+  };
+}
+
+function getApiErrorMessage(err: unknown, fallback: string): string {
+  const axiosErr = err as {
+    message?: string;
+    response?: { status?: number; data?: unknown };
+  };
+
+  if (axiosErr.response?.data) {
+    if (typeof axiosErr.response.data === "string") {
+      return axiosErr.response.data;
+    }
+
+    if (typeof axiosErr.response.data === "object") {
+      const entries = Object.entries(
+        axiosErr.response.data as Record<string, unknown>
+      );
+      if (entries.length > 0) {
+        return entries
+          .map(([key, val]) => {
+            if (Array.isArray(val)) {
+              return `${key}: ${val.join(", ")}`;
+            }
+            return `${key}: ${String(val)}`;
+          })
+          .join("; ");
+      }
+    }
+  }
+
+  if (axiosErr.message) {
+    return `${fallback}: ${axiosErr.message}`;
+  }
+
+  if (axiosErr.response?.status) {
+    return `${fallback} (HTTP ${axiosErr.response.status})`;
+  }
+
+  return fallback;
+}
+
 export default function NewArticlePage() {
   const router = useRouter();
 
@@ -79,26 +139,18 @@ export default function NewArticlePage() {
       const payload: Record<string, unknown> = {
         title,
         excerpt,
-        featured_image: featuredImage || null,
+        featured_image: featuredImage.trim(),
         category: categoryId,
         subcategory: subcategoryId || null,
         status,
         is_featured: isFeatured,
-        content: editorData,
+        content: normalizeEditorData(editorData),
       };
 
       await api.post("/articles/", payload);
       router.push("/admin/articles");
     } catch (err: unknown) {
-      const axiosErr = err as { response?: { data?: Record<string, string[]> } };
-      if (axiosErr.response?.data) {
-        const messages = Object.entries(axiosErr.response.data)
-          .map(([key, val]) => `${key}: ${Array.isArray(val) ? val.join(", ") : val}`)
-          .join("; ");
-        setError(messages);
-      } else {
-        setError("Failed to create article");
-      }
+      setError(getApiErrorMessage(err, "Failed to create article"));
     } finally {
       setSaving(false);
     }
