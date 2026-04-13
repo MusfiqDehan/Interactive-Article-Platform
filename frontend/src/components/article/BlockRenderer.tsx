@@ -13,6 +13,9 @@ import DelimiterBlock from "./DelimiterBlock";
 import CodeBlock from "./CodeBlock";
 import InteractiveTextBlock from "./InteractiveTextBlock";
 import InteractiveImageBlock from "./InteractiveImageBlock";
+import InteractiveAudioBlock from "./InteractiveAudioBlock";
+import InteractiveVideoBlock from "./InteractiveVideoBlock";
+import InteractiveYouTubeBlock from "./InteractiveYouTubeBlock";
 
 interface BlockRendererProps {
   blocks: EditorBlock[];
@@ -32,6 +35,9 @@ const blockComponents: Record<string, React.ComponentType<{ data: Record<string,
   code: CodeBlock,
   interactive_text: InteractiveTextBlock,
   interactive_image: InteractiveImageBlock,
+  interactive_audio: InteractiveAudioBlock,
+  interactive_video: InteractiveVideoBlock,
+  interactive_youtube: InteractiveYouTubeBlock,
 };
 
 export default function BlockRenderer({ blocks }: BlockRendererProps) {
