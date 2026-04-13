@@ -24,7 +24,7 @@ def sanitize_block_text(text):
     return nh3.clean(
         text,
         tags={"b", "i", "u", "a", "br", "em", "strong", "mark", "code", "span"},
-        attributes={"a": {"href", "target"}, "span": {"class", "data-modal-id", "data-annotation-id", "data-annotation-icon"}},
+        attributes={"a": {"href", "target"}, "span": {"class", "data-modal-id", "data-annotation-id", "data-annotation-icon", "data-annotation"}},
     )
 
 
