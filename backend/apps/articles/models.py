@@ -1,3 +1,5 @@
+import uuid
+
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
@@ -12,7 +14,7 @@ class Article(models.Model):
     )
 
     title = models.CharField(max_length=300)
-    slug = models.SlugField(max_length=300, unique=True, blank=True)
+    slug = models.SlugField(max_length=300, unique=True, blank=True, allow_unicode=True)
     author = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -52,7 +54,9 @@ class Article(models.Model):
 
     def save(self, *args, **kwargs):
         if not self.slug:
-            base_slug = slugify(self.title)
+            base_slug = slugify(self.title, allow_unicode=True)
+            if not base_slug:
+                base_slug = uuid.uuid4().hex[:8]
             slug = base_slug
             counter = 1
             while Article.objects.filter(slug=slug).exclude(pk=self.pk).exists():
