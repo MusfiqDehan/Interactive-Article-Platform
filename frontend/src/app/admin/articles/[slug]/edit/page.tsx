@@ -81,7 +81,7 @@ function getApiErrorMessage(err: unknown, fallback: string): string {
 export default function EditArticlePage() {
   const router = useRouter();
   const params = useParams();
-  const articleSlug = params.slug as string;
+  const articleSlug = decodeURIComponent(params.slug as string);
 
   const [title, setTitle] = useState("");
   const [excerpt, setExcerpt] = useState("");
