@@ -4,6 +4,8 @@
  * hotspot markers. Each hotspot opens a modal on the public article page.
  */
 
+import { normalizeMediaUrl } from "@/lib/media";
+
 interface ImageHotspot {
   id: string;
   x: number;
@@ -58,8 +60,8 @@ export default class InteractiveImageTool {
     api: unknown;
   }) {
     this.data = {
-      file: data?.file,
-      url: data?.url,
+      file: data?.file?.url ? { url: normalizeMediaUrl(data.file.url) } : data?.file,
+      url: data?.url ? normalizeMediaUrl(data.url) : data?.url,
       caption: data?.caption || "",
       hotspots: data?.hotspots || [],
     };
@@ -70,7 +72,7 @@ export default class InteractiveImageTool {
     this.wrapper = document.createElement("div");
     this.wrapper.style.cssText =
       "border:1px solid #e2e8f0;border-radius:12px;padding:16px;background:#f8fafc;";
-    const imageUrl = this.data.file?.url || this.data.url || "";
+    const imageUrl = normalizeMediaUrl(this.data.file?.url || this.data.url || "");
     if (imageUrl) {
       this._renderImageView(imageUrl);
     } else {
@@ -412,8 +414,9 @@ export default class InteractiveImageTool {
       });
       const result = await response.json();
       if (result.success === 1 && result.file?.url) {
-        this.data.file = { url: result.file.url };
-        this._renderImageView(result.file.url);
+        const mediaUrl = normalizeMediaUrl(result.file.url);
+        this.data.file = { url: mediaUrl };
+        this._renderImageView(mediaUrl);
       } else {
         this._renderUploadUI();
       }

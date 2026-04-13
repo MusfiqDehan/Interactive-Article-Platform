@@ -3,6 +3,8 @@
  * Supports file upload and URL input for audio content.
  */
 
+import { normalizeMediaUrl } from "@/lib/media";
+
 interface AudioToolData {
   file?: { url: string };
   url?: string;
@@ -38,7 +40,11 @@ export default class AudioTool {
   }
 
   constructor({ data, config }: AudioToolConstructorParams) {
-    this.data = data || {};
+    this.data = {
+      file: data?.file?.url ? { url: normalizeMediaUrl(data.file.url) } : data?.file,
+      url: data?.url ? normalizeMediaUrl(data.url) : data?.url,
+      caption: data?.caption || "",
+    };
     this.config = config || {};
   }
 
@@ -47,7 +53,7 @@ export default class AudioTool {
     this.wrapper.style.cssText =
       "border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; background: #f8fafc;";
 
-    const audioUrl = this.data.file?.url || this.data.url || "";
+    const audioUrl = normalizeMediaUrl(this.data.file?.url || this.data.url || "");
 
     if (audioUrl) {
       this._renderAudioPlayer(audioUrl);
@@ -186,11 +192,12 @@ export default class AudioTool {
       const result = await response.json();
 
       if (result.success === 1 && result.file?.url) {
+        const mediaUrl = normalizeMediaUrl(result.file.url);
         this.data = {
-          file: { url: result.file.url },
+          file: { url: mediaUrl },
           caption: this.data.caption || "",
         };
-        this._renderAudioPlayer(result.file.url);
+        this._renderAudioPlayer(mediaUrl);
       } else {
         this._renderUploadUI();
         console.error("AudioTool: Upload failed", result);

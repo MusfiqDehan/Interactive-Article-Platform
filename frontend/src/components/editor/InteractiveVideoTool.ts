@@ -4,6 +4,8 @@
  * Each chapter seeks the video player and opens a modal on the public page.
  */
 
+import { normalizeMediaUrl } from "@/lib/media";
+
 interface MediaChapter {
   id: string;
   time: number;
@@ -55,8 +57,8 @@ export default class InteractiveVideoTool {
     api: unknown;
   }) {
     this.data = {
-      file: data?.file,
-      url: data?.url,
+      file: data?.file?.url ? { url: normalizeMediaUrl(data.file.url) } : data?.file,
+      url: data?.url ? normalizeMediaUrl(data.url) : data?.url,
       caption: data?.caption || "",
       chapters: data?.chapters || [],
     };
@@ -67,7 +69,7 @@ export default class InteractiveVideoTool {
     this.wrapper = document.createElement("div");
     this.wrapper.style.cssText =
       "border:1px solid #e2e8f0;border-radius:12px;padding:16px;background:#f8fafc;";
-    const videoUrl = this.data.file?.url || this.data.url || "";
+    const videoUrl = normalizeMediaUrl(this.data.file?.url || this.data.url || "");
     if (videoUrl) {
       this._renderVideoView(videoUrl);
     } else {
@@ -290,8 +292,9 @@ export default class InteractiveVideoTool {
       const response = await fetch(endpoint, { method: "POST", body: formData, headers: this.config.additionalRequestHeaders || {} });
       const result = await response.json();
       if (result.success === 1 && result.file?.url) {
-        this.data.file = { url: result.file.url };
-        this._renderVideoView(result.file.url);
+        const mediaUrl = normalizeMediaUrl(result.file.url);
+        this.data.file = { url: mediaUrl };
+        this._renderVideoView(mediaUrl);
       } else {
         this._renderUploadUI();
       }

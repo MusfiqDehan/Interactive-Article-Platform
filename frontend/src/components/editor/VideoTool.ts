@@ -3,6 +3,8 @@
  * Supports file upload, URL input, and YouTube embed for video content.
  */
 
+import { normalizeMediaUrl } from "@/lib/media";
+
 interface VideoToolData {
   file?: { url: string };
   url?: string;
@@ -39,7 +41,12 @@ export default class VideoTool {
   }
 
   constructor({ data, config }: VideoToolConstructorParams) {
-    this.data = data || {};
+    this.data = {
+      file: data?.file?.url ? { url: normalizeMediaUrl(data.file.url) } : data?.file,
+      url: data?.url ? normalizeMediaUrl(data.url) : data?.url,
+      caption: data?.caption || "",
+      service: data?.service,
+    };
     this.config = config || {};
   }
 
@@ -48,7 +55,7 @@ export default class VideoTool {
     this.wrapper.style.cssText =
       "border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; background: #f8fafc;";
 
-    const videoUrl = this.data.file?.url || this.data.url || "";
+    const videoUrl = normalizeMediaUrl(this.data.file?.url || this.data.url || "");
 
     if (videoUrl) {
       this._renderVideoPlayer(videoUrl);
@@ -192,11 +199,12 @@ export default class VideoTool {
       const result = await response.json();
 
       if (result.success === 1 && result.file?.url) {
+        const mediaUrl = normalizeMediaUrl(result.file.url);
         this.data = {
-          file: { url: result.file.url },
+          file: { url: mediaUrl },
           caption: this.data.caption || "",
         };
-        this._renderVideoPlayer(result.file.url);
+        this._renderVideoPlayer(mediaUrl);
       } else {
         this._renderUploadUI();
         console.error("VideoTool: Upload failed", result);

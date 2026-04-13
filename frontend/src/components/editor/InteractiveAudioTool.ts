@@ -4,6 +4,8 @@
  * Each chapter seeks the player and opens a modal on the public page.
  */
 
+import { normalizeMediaUrl } from "@/lib/media";
+
 interface MediaChapter {
   id: string;
   time: number; // seconds
@@ -55,8 +57,8 @@ export default class InteractiveAudioTool {
     api: unknown;
   }) {
     this.data = {
-      file: data?.file,
-      url: data?.url,
+      file: data?.file?.url ? { url: normalizeMediaUrl(data.file.url) } : data?.file,
+      url: data?.url ? normalizeMediaUrl(data.url) : data?.url,
       caption: data?.caption || "",
       chapters: data?.chapters || [],
     };
@@ -67,7 +69,7 @@ export default class InteractiveAudioTool {
     this.wrapper = document.createElement("div");
     this.wrapper.style.cssText =
       "border:1px solid #e2e8f0;border-radius:12px;padding:16px;background:#f8fafc;";
-    const audioUrl = this.data.file?.url || this.data.url || "";
+    const audioUrl = normalizeMediaUrl(this.data.file?.url || this.data.url || "");
     if (audioUrl) {
       this._renderAudioView(audioUrl);
     } else {
@@ -300,8 +302,9 @@ export default class InteractiveAudioTool {
       const response = await fetch(endpoint, { method: "POST", body: formData, headers: this.config.additionalRequestHeaders || {} });
       const result = await response.json();
       if (result.success === 1 && result.file?.url) {
-        this.data.file = { url: result.file.url };
-        this._renderAudioView(result.file.url);
+        const mediaUrl = normalizeMediaUrl(result.file.url);
+        this.data.file = { url: mediaUrl };
+        this._renderAudioView(mediaUrl);
       } else {
         this._renderUploadUI();
       }
