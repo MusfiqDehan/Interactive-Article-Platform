@@ -7,5 +7,6 @@ drf-spectacular==0.28.0
 psycopg2-binary==2.9.10
 Pillow==11.1.0
 nh3==0.2.20
+whitenoise==6.8.2
 gunicorn==23.0.0
 python-decouple==3.8
