@@ -10,7 +10,7 @@ import { Category, ArticleListItem, PaginatedResponse } from "@/lib/types";
 
 export default function CategoryDetailPage() {
   const params = useParams();
-  const slug = params.slug as string;
+  const slug = decodeURIComponent(params.slug as string);
   const [category, setCategory] = useState<Category | null>(null);
   const [articles, setArticles] = useState<ArticleListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
