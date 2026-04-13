@@ -299,19 +299,20 @@ export default function NewArticlePage() {
           <h3 className="font-medium text-blue-800 dark:text-blue-300 mb-2">
             Interactive Content Tips
           </h3>
-          <p className="text-sm text-blue-600 dark:text-blue-400">
-            After saving, you can add interactive elements (text annotations with
-            modals, image hotspots) by editing the article&apos;s JSON content
-            directly. Use block types{" "}
-            <code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">
-              interactive_text
-            </code>{" "}
-            and{" "}
-            <code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">
-              interactive_image
-            </code>{" "}
-            with their respective annotation/hotspot data.
-          </p>
+          <ul className="text-sm text-blue-600 dark:text-blue-400 space-y-1 list-disc list-inside">
+            <li>
+              Use the <strong>Interactive Text</strong> block to type a paragraph, then{" "}
+              <strong>select any words</strong> to attach a text explanation, image, audio, video, or YouTube embed — a blue highlight and 🔍 icon will appear on those words.
+            </li>
+            <li>
+              Use the <strong>Interactive Image</strong> block to upload an image and{" "}
+              <strong>click directly on it</strong> to place clickable hotspot regions.
+            </li>
+            <li>
+              Use <strong>Interactive Audio</strong>, <strong>Interactive Video</strong>, or{" "}
+              <strong>Interactive YouTube</strong> blocks to attach timed chapters that open info modals.
+            </li>
+          </ul>
         </div>
 
         {/* Actions */}
