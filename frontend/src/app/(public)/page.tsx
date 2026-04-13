@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ArrowRight, BookOpen, Sparkles, Layers, Play, MousePointerClick } from "lucide-react";
 import api from "@/lib/api";
+import { normalizeMediaUrl } from "@/lib/media";
 import { ArticleListItem, Category } from "@/lib/types";
 
 export default function LandingPage() {
@@ -258,7 +259,7 @@ function ArticleCard({ article }: { article: ArticleListItem }) {
       {article.featured_image ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={article.featured_image}
+          src={normalizeMediaUrl(article.featured_image)}
           alt={article.title}
           className="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-300"
         />

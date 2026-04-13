@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import api from "@/lib/api";
+import { normalizeMediaUrl } from "@/lib/media";
 import type { MediaFile } from "@/lib/types";
 import { Upload, Trash2, Image, Film, Music, File, Copy, Check } from "lucide-react";
 
@@ -137,7 +138,7 @@ export default function AdminMediaPage() {
               <div className="aspect-square bg-slate-100 dark:bg-slate-800 flex items-center justify-center overflow-hidden">
                 {file.file_type === "image" ? (
                   <img
-                    src={file.file}
+                    src={normalizeMediaUrl(file.url || file.file)}
                     alt={file.alt_text || file.title}
                     className="w-full h-full object-cover"
                   />
@@ -170,7 +171,7 @@ export default function AdminMediaPage() {
                 {/* Actions */}
                 <div className="flex items-center gap-2 mt-3">
                   <button
-                    onClick={() => copyUrl(file.id, file.file)}
+                    onClick={() => copyUrl(file.id, normalizeMediaUrl(file.url || file.file))}
                     className="flex-1 text-xs flex items-center justify-center gap-1 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-lg transition"
                   >
                     {copiedId === file.id ? (

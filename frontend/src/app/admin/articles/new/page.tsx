@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import api from "@/lib/api";
+import { normalizeMediaUrl } from "@/lib/media";
 import type { Category, SubCategory } from "@/lib/types";
 import type { OutputData } from "@editorjs/editorjs";
 import { ArrowLeft, Save } from "lucide-react";
@@ -166,7 +167,7 @@ export default function NewArticlePage() {
         headers: { "Content-Type": "multipart/form-data" },
       });
       if (res.data?.file?.url) {
-        setFeaturedImage(res.data.file.url);
+        setFeaturedImage(normalizeMediaUrl(res.data.file.url));
       }
     } catch {
       setError("Failed to upload image");
@@ -285,7 +286,7 @@ export default function NewArticlePage() {
             />
             {featuredImage && (
               <img
-                src={featuredImage}
+                src={normalizeMediaUrl(featuredImage)}
                 alt="Featured"
                 className="w-20 h-20 object-cover rounded-lg"
               />

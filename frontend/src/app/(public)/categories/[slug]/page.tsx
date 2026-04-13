@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useState, useCallback } from "react";
 import { ArrowLeft, BookOpen, ChevronLeft, ChevronRight } from "lucide-react";
 import api from "@/lib/api";
+import { normalizeMediaUrl } from "@/lib/media";
 import { Category, ArticleListItem, PaginatedResponse } from "@/lib/types";
 
 export default function CategoryDetailPage() {
@@ -105,7 +106,7 @@ export default function CategoryDetailPage() {
                 {article.featured_image ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    src={article.featured_image}
+                    src={normalizeMediaUrl(article.featured_image)}
                     alt={article.title}
                     className="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-300"
                   />

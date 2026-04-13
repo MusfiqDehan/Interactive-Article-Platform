@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import Modal from "@/components/ui/Modal";
+import { normalizeMediaUrl } from "@/lib/media";
 import { MediaChapter } from "@/lib/types";
 
 function formatTime(seconds: number): string {
@@ -12,7 +13,7 @@ function formatTime(seconds: number): string {
 
 export default function InteractiveVideoBlock({ data }: { data: Record<string, unknown> }) {
   const file = data.file as { url?: string } | undefined;
-  const url = (data.url as string) || file?.url || "";
+  const url = normalizeMediaUrl((data.url as string) || file?.url || "");
   const caption = (data.caption as string) || "";
   const chapters = (data.chapters as MediaChapter[]) || [];
   const [activeChapter, setActiveChapter] = useState<MediaChapter | null>(null);

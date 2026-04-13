@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import Modal from "@/components/ui/Modal";
+import { normalizeMediaUrl } from "@/lib/media";
 import { InteractiveAnnotation } from "@/lib/types";
 
 // ─── HTML parser ──────────────────────────────────────────────────────────────
@@ -82,7 +83,7 @@ function AnnotationModalContent({
         /* eslint-disable @next/next/no-img-element */
         <figure className="m-0">
           <img
-            src={annotation.image_url}
+            src={normalizeMediaUrl(annotation.image_url)}
             alt={annotation.modal_title}
             className="w-full rounded-xl"
           />
@@ -98,7 +99,7 @@ function AnnotationModalContent({
       return (
         <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4">
           <audio
-            src={annotation.audio_url}
+            src={normalizeMediaUrl(annotation.audio_url)}
             controls
             className="w-full"
             preload="metadata"
@@ -112,7 +113,7 @@ function AnnotationModalContent({
       return (
         <div className="rounded-xl overflow-hidden bg-slate-900">
           <video
-            src={annotation.video_url}
+            src={normalizeMediaUrl(annotation.video_url)}
             controls
             className="w-full"
             preload="metadata"

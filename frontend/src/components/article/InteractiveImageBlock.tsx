@@ -2,12 +2,13 @@
 
 import { useState } from "react";
 import Modal from "@/components/ui/Modal";
+import { normalizeMediaUrl } from "@/lib/media";
 import { ImageHotspot } from "@/lib/types";
 
 /* eslint-disable @next/next/no-img-element */
 export default function InteractiveImageBlock({ data }: { data: Record<string, unknown> }) {
   const file = data.file as { url?: string } | undefined;
-  const url = (data.url as string) || file?.url || "";
+  const url = normalizeMediaUrl((data.url as string) || file?.url || "");
   const caption = (data.caption as string) || "";
   const hotspots = (data.hotspots as ImageHotspot[]) || [];
   const [activeHotspot, setActiveHotspot] = useState<ImageHotspot | null>(null);

@@ -1,7 +1,9 @@
+import { normalizeMediaUrl } from "@/lib/media";
+
 /* eslint-disable @next/next/no-img-element */
 export default function ImageBlock({ data }: { data: Record<string, unknown> }) {
   const file = data.file as { url?: string } | undefined;
-  const url = (data.url as string) || file?.url || "";
+  const url = normalizeMediaUrl((data.url as string) || file?.url || "");
   const caption = (data.caption as string) || "";
   const withBorder = data.withBorder as boolean;
   const stretched = data.stretched as boolean;

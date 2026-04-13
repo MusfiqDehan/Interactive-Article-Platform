@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Clock, Eye, Calendar, User } from "lucide-react";
 import api from "@/lib/api";
+import { normalizeMediaUrl } from "@/lib/media";
 import { Article } from "@/lib/types";
 import BlockRenderer from "@/components/article/BlockRenderer";
 
@@ -142,7 +143,7 @@ export default function ArticleDetailPage() {
         <div className="mb-10 rounded-2xl overflow-hidden">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={article.featured_image}
+            src={normalizeMediaUrl(article.featured_image)}
             alt={article.title}
             className="w-full h-auto object-cover"
           />

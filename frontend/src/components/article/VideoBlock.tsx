@@ -1,6 +1,8 @@
+import { normalizeMediaUrl } from "@/lib/media";
+
 export default function VideoBlock({ data }: { data: Record<string, unknown> }) {
   const file = data.file as { url?: string } | undefined;
-  const url = (data.url as string) || file?.url || "";
+  const url = normalizeMediaUrl((data.url as string) || file?.url || "");
   const caption = (data.caption as string) || "";
 
   return (
