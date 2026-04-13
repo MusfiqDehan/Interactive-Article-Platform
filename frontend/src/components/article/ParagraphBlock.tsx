@@ -20,98 +20,80 @@ type Segment =
   | { kind: "text"; html: string }
   | { kind: "annotation"; annotation: InlineAnnotation; innerText: string };
 
+/** Strip editor-only icon spans (🔍) that the inline tool injects for UX. */
+function stripIconSpans(html: string): string {
+  return html.replace(
+    /<span[^>]*?\bdata-annotation-icon\b[^>]*?>[\s\S]*?<\/span>/g,
+    ""
+  );
+}
+
 /**
  * Parse paragraph HTML and extract inline annotations whose metadata is stored
  * in a `data-annotation` attribute (JSON) on the wrapping `<span>`.
+ *
+ * Icon spans are stripped FIRST so that annotation `<span>`s have no nested
+ * `</span>` tags — this lets the simple `([\s\S]*?)<\/span>` regex work
+ * correctly.
  */
 function parseInlineAnnotations(html: string): {
   segments: Segment[];
   hasAnnotations: boolean;
 } {
-  // Match <span ... data-annotation-id="ID" ... data-annotation="JSON" ...>CONTENT</span>
-  // Attribute order may vary so we capture the whole opening tag and extract attrs separately.
+  // Step 1 – remove icon spans so annotation spans have no nested </span>
+  const cleaned = stripIconSpans(html);
+
+  // Step 2 – find annotation spans (attribute order doesn't matter; we
+  // capture the whole opening-tag attrs string and extract values from it)
   const regex =
-    /<span\s([^>]*?data-annotation-id="([^"]+)"[^>]*?data-annotation="([^"]*)"[^>]*?)>([\s\S]*?)<\/span>/g;
+    /<span\s([^>]*?\bdata-annotation-id="([^"]+)"[^>]*?)>([\s\S]*?)<\/span>/g;
   const segments: Segment[] = [];
   let lastIndex = 0;
   let match: RegExpExecArray | null;
   let found = false;
 
-  while ((match = regex.exec(html)) !== null) {
+  while ((match = regex.exec(cleaned)) !== null) {
     if (match.index > lastIndex) {
-      segments.push({ kind: "text", html: html.slice(lastIndex, match.index) });
+      segments.push({
+        kind: "text",
+        html: cleaned.slice(lastIndex, match.index),
+      });
     }
 
-    const jsonStr = match[3];
-    const innerRaw = match[4];
-    // Strip editor-only icon spans
-    const innerText = innerRaw
-      .replace(/<span[^>]*?data-annotation-icon[^>]*?>[\s\S]*?<\/span>/g, "")
-      .trim();
+    const attrs = match[1];
+    const innerText = match[3].trim();
 
-    try {
-      const ann = JSON.parse(
-        jsonStr.replace(/&quot;/g, '"').replace(/&amp;/g, "&")
-      ) as InlineAnnotation;
-      segments.push({ kind: "annotation", annotation: ann, innerText });
+    // Extract the data-annotation JSON from the attributes string
+    const jsonMatch = attrs.match(/\bdata-annotation="([^"]*)"/);
+    let annotation: InlineAnnotation | null = null;
+
+    if (jsonMatch) {
+      try {
+        annotation = JSON.parse(
+          jsonMatch[1]
+            .replace(/&quot;/g, '"')
+            .replace(/&amp;/g, "&")
+            .replace(/&lt;/g, "<")
+            .replace(/&gt;/g, ">")
+        ) as InlineAnnotation;
+      } catch {
+        /* corrupted JSON – fall through */
+      }
+    }
+
+    if (annotation) {
+      segments.push({ kind: "annotation", annotation, innerText });
       found = true;
-    } catch {
-      // Corrupted JSON – render as plain text
-      segments.push({ kind: "text", html: match[0] });
+    } else {
+      // No valid annotation data – render as plain text
+      segments.push({ kind: "text", html: innerText });
     }
 
     lastIndex = match.index + match[0].length;
   }
 
-  if (lastIndex < html.length) {
-    segments.push({ kind: "text", html: html.slice(lastIndex) });
-  }
-
-  return { segments, hasAnnotations: found };
-}
-
-// Also try the reversed attribute order
-function parseInlineAnnotationsFlexible(html: string): {
-  segments: Segment[];
-  hasAnnotations: boolean;
-} {
-  const first = parseInlineAnnotations(html);
-  if (first.hasAnnotations) return first;
-
-  // Try reversed attribute order: data-annotation before data-annotation-id
-  const regex =
-    /<span\s([^>]*?data-annotation="([^"]*)"[^>]*?data-annotation-id="([^"]+)"[^>]*?)>([\s\S]*?)<\/span>/g;
-  const segments: Segment[] = [];
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
-  let found = false;
-
-  while ((match = regex.exec(html)) !== null) {
-    if (match.index > lastIndex) {
-      segments.push({ kind: "text", html: html.slice(lastIndex, match.index) });
-    }
-
-    const jsonStr = match[2];
-    const innerRaw = match[4];
-    const innerText = innerRaw
-      .replace(/<span[^>]*?data-annotation-icon[^>]*?>[\s\S]*?<\/span>/g, "")
-      .trim();
-
-    try {
-      const ann = JSON.parse(
-        jsonStr.replace(/&quot;/g, '"').replace(/&amp;/g, "&")
-      ) as InlineAnnotation;
-      segments.push({ kind: "annotation", annotation: ann, innerText });
-      found = true;
-    } catch {
-      segments.push({ kind: "text", html: match[0] });
-    }
-
-    lastIndex = match.index + match[0].length;
-  }
-
-  if (lastIndex < html.length) {
-    segments.push({ kind: "text", html: html.slice(lastIndex) });
+  if (lastIndex < cleaned.length) {
+    segments.push({ kind: "text", html: cleaned.slice(lastIndex) });
   }
 
   return { segments, hasAnnotations: found };
@@ -215,16 +197,18 @@ export default function ParagraphBlock({
     useState<InlineAnnotation | null>(null);
 
   const { segments, hasAnnotations } = useMemo(
-    () => parseInlineAnnotationsFlexible(text),
+    () => parseInlineAnnotations(text),
     [text]
   );
 
   // Fast path: plain paragraph with no inline annotations
   if (!hasAnnotations) {
+    // Still strip any leftover icon spans before rendering
+    const safeHtml = stripIconSpans(text);
     return (
       <p
         className="text-slate-700 dark:text-slate-300 leading-relaxed"
-        dangerouslySetInnerHTML={{ __html: text }}
+        dangerouslySetInnerHTML={{ __html: safeHtml }}
       />
     );
   }
