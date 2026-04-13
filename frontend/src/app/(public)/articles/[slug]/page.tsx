@@ -11,7 +11,7 @@ import BlockRenderer from "@/components/article/BlockRenderer";
 
 export default function ArticleDetailPage() {
   const params = useParams();
-  const slug = params.slug as string;
+  const slug = decodeURIComponent(params.slug as string);
   const [article, setArticle] = useState<Article | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
