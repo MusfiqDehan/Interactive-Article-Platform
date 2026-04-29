@@ -3,6 +3,8 @@ from drf_spectacular.utils import extend_schema
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework_simplejwt.models import BlacklistedToken, OutstandingToken
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
@@ -52,21 +54,39 @@ class LogoutView(APIView):
     permission_classes = (permissions.IsAuthenticated,)
 
     def post(self, request):
+        refresh_token = request.data.get("refresh")
+        if not refresh_token:
+            return Response(
+                {"error": "Refresh token is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         try:
-            refresh_token = request.data.get("refresh")
-            if not refresh_token:
-                return Response(
-                    {"error": "Refresh token is required."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
             token = RefreshToken(refresh_token)
-            token.blacklist()
-            return Response({"detail": "Successfully logged out."}, status=status.HTTP_200_OK)
-        except Exception:
+        except TokenError:
             return Response(
                 {"error": "Invalid token."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        jti = token.payload.get("jti")
+        if not jti:
+            return Response(
+                {"error": "Invalid token."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            outstanding_token = OutstandingToken.objects.get(jti=jti)
+        except OutstandingToken.DoesNotExist:
+            return Response(
+                {"error": "Invalid token."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        BlacklistedToken.objects.get_or_create(token=outstanding_token)
+
+        return Response({"detail": "Successfully logged out."}, status=status.HTTP_200_OK)
 
 
 @extend_schema(tags=["Auth"])
