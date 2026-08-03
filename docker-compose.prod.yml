@@ -16,7 +16,7 @@ services:
       - backend_static:/app/staticfiles
       - backend_media:/app/media
     networks:
-      - iap_network
+      - app_network
       - traefik_proxy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; req=urllib.request.Request('http://localhost:8003/admin/login/', headers={'Host':'interactive-articles-api.musfiqdehan.com'}); urllib.request.urlopen(req)"]
@@ -53,7 +53,7 @@ services:
       backend:
         condition: service_healthy
     networks:
-      - iap_network
+      - app_network
       - traefik_proxy
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3003/login"]
@@ -82,7 +82,7 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - iap_network
+      - app_network
       - traefik_proxy
     restart: unless-stopped
 
@@ -92,7 +92,8 @@ volumes:
   backend_media:
 
 networks:
-  iap_network:
+  app_network:
+    name: iap_network
     driver: bridge
   traefik_proxy:
     external: true
