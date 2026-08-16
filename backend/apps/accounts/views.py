@@ -1,17 +1,21 @@
 from django.contrib.auth import get_user_model
 from drf_spectacular.utils import extend_schema
-from rest_framework import generics, permissions, status
+from rest_framework import permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework_simplejwt.exceptions import TokenBackendError, TokenError
+from rest_framework_simplejwt.state import token_backend
 from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
 from common.permissions import IsAdminUser
+from common.views import BaseAPIView
 
 from .serializers import (
     CustomTokenObtainPairSerializer,
+    DetailSerializer,
+    LogoutSerializer,
     ProfileUpdateSerializer,
     RegisterSerializer,
     UserListSerializer,
@@ -27,12 +31,14 @@ class CustomTokenObtainPairView(TokenObtainPairView):
 
 
 @extend_schema(tags=["Auth"])
-class RegisterView(generics.CreateAPIView):
-    queryset = User.objects.all()
+class RegisterView(BaseAPIView):
+    """POST /api/auth/register/"""
+
     permission_classes = (permissions.AllowAny,)
     serializer_class = RegisterSerializer
+    pagination_class = None
 
-    def create(self, request, *args, **kwargs):
+    def post(self, request):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
@@ -49,7 +55,11 @@ class RegisterView(generics.CreateAPIView):
         )
 
 
-@extend_schema(tags=["Auth"])
+@extend_schema(
+    tags=["Auth"],
+    request=LogoutSerializer,
+    responses={200: DetailSerializer, 400: DetailSerializer},
+)
 class LogoutView(APIView):
     permission_classes = (permissions.IsAuthenticated,)
 
@@ -61,15 +71,21 @@ class LogoutView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # NOTE: deliberately *not* ``RefreshToken(refresh_token)``. That runs the
+        # blacklist check during construction and raises TokenError for a token
+        # that is already blacklisted -- which would make a second logout fail
+        # with 400 and defeat the idempotency this endpoint promises. Decoding
+        # through the backend still verifies the signature and expiry, but leaves
+        # the "already blacklisted" case for us to treat as success below.
         try:
-            token = RefreshToken(refresh_token)
-        except TokenError:
+            payload = token_backend.decode(refresh_token, verify=True)
+        except (TokenBackendError, TokenError):
             return Response(
                 {"error": "Invalid token."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        jti = token.payload.get("jti")
+        jti = payload.get("jti")
         if not jti:
             return Response(
                 {"error": "Invalid token."},
@@ -90,22 +106,48 @@ class LogoutView(APIView):
 
 
 @extend_schema(tags=["Auth"])
-class ProfileView(generics.RetrieveUpdateAPIView):
+class ProfileView(BaseAPIView):
+    """GET · PUT · PATCH /api/auth/profile/ -- always the caller's own record."""
+
     permission_classes = (permissions.IsAuthenticated,)
+    pagination_class = None
 
     def get_serializer_class(self):
         if self.request.method in ("PUT", "PATCH"):
             return ProfileUpdateSerializer
         return UserSerializer
 
-    def get_object(self):
-        return self.request.user
+    def get(self, request):
+        return Response(UserSerializer(request.user).data)
+
+    def put(self, request):
+        return self._update(request, partial=False)
+
+    def patch(self, request):
+        return self._update(request, partial=True)
+
+    def _update(self, request, *, partial):
+        serializer = ProfileUpdateSerializer(
+            request.user, data=request.data, partial=partial, context=self.get_serializer_context()
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
 
 
 @extend_schema(tags=["Auth"])
-class UserListView(generics.ListAPIView):
-    queryset = User.objects.all()
+class UserListView(BaseAPIView):
+    """GET /api/auth/users/"""
+
     serializer_class = UserListSerializer
     permission_classes = (IsAdminUser,)
     filterset_fields = ("role", "is_active")
     search_fields = ("email", "username", "first_name", "last_name")
+
+    def get_queryset(self):
+        # Users are global, not tenant-scoped: per-site access is expressed by
+        # SiteMembership rather than by which rows exist.
+        return User.objects.all().order_by("-date_joined", "-id")
+
+    def get(self, request):
+        return self.list_response(self.get_queryset())
