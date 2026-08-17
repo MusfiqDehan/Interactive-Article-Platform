@@ -3,8 +3,10 @@ import os
 from django.conf import settings
 from django.db import models
 
+from common.tenancy import TenantModel
 
-class MediaFile(models.Model):
+
+class MediaFile(TenantModel):
     FILE_TYPE_CHOICES = (
         ("image", "Image"),
         ("audio", "Audio"),
