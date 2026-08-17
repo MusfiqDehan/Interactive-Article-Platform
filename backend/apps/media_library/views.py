@@ -1,20 +1,40 @@
-import mimetypes
+"""Media upload.
+
+Reading and editing media is the studio's job (``apps.studio.views``); this
+module holds only the multipart upload endpoint, because its response shape is
+dictated by Editor.js rather than by our own API conventions and does not
+belong next to serializer-shaped views.
+"""
 
 from drf_spectacular.utils import extend_schema
-from rest_framework import generics, parsers, permissions, status
+from rest_framework import parsers, status
+from rest_framework.exceptions import ValidationError
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from common.permissions import IsAdminOrAuthor, IsOwnerOrAdmin
+from common.permissions import HasSiteRole
 
 from .models import MediaFile
-from .serializers import MediaFileSerializer, MediaUploadSerializer
+from .serializers import MediaUploadSerializer
+from .validation import validate_upload
 
 
-@extend_schema(tags=["Media"])
+@extend_schema(tags=["Studio"])
 class MediaUploadView(APIView):
-    """Upload endpoint compatible with Editor.js image/file tools."""
-    permission_classes = (IsAdminOrAuthor,)
+    """POST /api/v1/studio/media/upload/
+
+    The response shape (``{success, file: {url, id, name, size, type}}``) is
+    **required verbatim** by the Editor.js image and attachment tools -- they
+    read those exact keys and silently drop the block if any is missing. It is
+    not our envelope to tidy.
+
+    Accepts either ``image`` or ``file`` as the field name, because the two
+    Editor.js tools disagree about which they send.
+    """
+
+    permission_classes = (IsAuthenticated, HasSiteRole)
+    required_site_role = "author"
     parser_classes = (parsers.MultiPartParser, parsers.FormParser)
 
     @extend_schema(request=MediaUploadSerializer, responses={200: dict})
@@ -26,52 +46,34 @@ class MediaUploadView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        mime_type, _ = mimetypes.guess_type(uploaded_file.name)
-        file_type = "image"
-        if mime_type:
-            if mime_type.startswith("audio"):
-                file_type = "audio"
-            elif mime_type.startswith("video"):
-                file_type = "video"
+        # This view previously called MediaFile.objects.create() directly, so
+        # the size cap and MIME allowlist on MediaFileSerializer.validate_file
+        # never ran on the primary upload path. Validate by content here.
+        try:
+            file_type, mime_type = validate_upload(uploaded_file)
+        except ValidationError as exc:
+            return Response(
+                {"success": 0, "message": " ".join(exc.detail)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         media_file = MediaFile.objects.create(
+            site=request.site,
             file=uploaded_file,
             file_type=file_type,
             mime_type=mime_type or "",
             uploaded_by=request.user,
         )
 
-        file_url = request.build_absolute_uri(media_file.file.url)
-
-        # Editor.js compatible response
-        return Response({
-            "success": 1,
-            "file": {
-                "url": file_url,
-                "id": media_file.id,
-                "name": media_file.title,
-                "size": media_file.file_size,
-                "type": media_file.file_type,
-            },
-        })
-
-
-@extend_schema(tags=["Media"])
-class MediaListView(generics.ListAPIView):
-    serializer_class = MediaFileSerializer
-    permission_classes = (IsAdminOrAuthor,)
-    filterset_fields = ("file_type",)
-    search_fields = ("title", "alt_text")
-
-    def get_queryset(self):
-        user = self.request.user
-        if user.role == "admin":
-            return MediaFile.objects.all()
-        return MediaFile.objects.filter(uploaded_by=user)
-
-
-@extend_schema(tags=["Media"])
-class MediaDetailView(generics.RetrieveDestroyAPIView):
-    serializer_class = MediaFileSerializer
-    permission_classes = (IsOwnerOrAdmin,)
-    queryset = MediaFile.objects.all()
+        return Response(
+            {
+                "success": 1,
+                "file": {
+                    "url": request.build_absolute_uri(media_file.file.url),
+                    "id": media_file.id,
+                    "name": media_file.title,
+                    "size": media_file.file_size,
+                    "type": media_file.file_type,
+                },
+            }
+        )
