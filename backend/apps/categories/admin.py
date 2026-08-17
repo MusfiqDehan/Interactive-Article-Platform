@@ -1,26 +1,19 @@
 from django.contrib import admin
 
-from .models import Category, SubCategory
-
-
-class SubCategoryInline(admin.TabularInline):
-    model = SubCategory
-    extra = 1
-    prepopulated_fields = {"slug": ("name",)}
+from .models import Category
 
 
 @admin.register(Category)
 class CategoryAdmin(admin.ModelAdmin):
-    list_display = ("name", "slug", "is_active", "order", "created_at")
-    list_filter = ("is_active",)
+    """Registered for the Django shell's benefit, not for editors.
+
+    The studio at `/studio/taxonomy` is the tool for this; the Django admin is
+    no longer served (see config/urls.py). Kept so `manage.py` introspection
+    and any future internal tooling still sees a sensible representation.
+    """
+
+    list_display = ("name", "slug", "depth", "url_path", "is_active", "order")
+    list_filter = ("is_active", "depth")
     search_fields = ("name",)
     prepopulated_fields = {"slug": ("name",)}
-    inlines = [SubCategoryInline]
-
-
-@admin.register(SubCategory)
-class SubCategoryAdmin(admin.ModelAdmin):
-    list_display = ("name", "category", "slug", "is_active", "order")
-    list_filter = ("category", "is_active")
-    search_fields = ("name",)
-    prepopulated_fields = {"slug": ("name",)}
+    readonly_fields = ("path", "url_path", "depth")
