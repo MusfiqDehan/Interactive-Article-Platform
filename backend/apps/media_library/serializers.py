@@ -1,13 +1,13 @@
-import mimetypes
-
 from rest_framework import serializers
 
 from .models import MediaFile
-
-ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp", "image/svg+xml"}
-ALLOWED_AUDIO_TYPES = {"audio/mpeg", "audio/wav", "audio/ogg", "audio/mp4"}
-ALLOWED_VIDEO_TYPES = {"video/mp4", "video/webm", "video/ogg", "video/quicktime"}
-MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
+from .validation import (  # noqa: F401  (re-exported for backwards compatibility)
+    ALLOWED_AUDIO_TYPES,
+    ALLOWED_IMAGE_TYPES,
+    ALLOWED_VIDEO_TYPES,
+    MAX_FILE_SIZE,
+    validate_upload,
+)
 
 
 class MediaFileSerializer(serializers.ModelSerializer):
@@ -25,14 +25,9 @@ class MediaFileSerializer(serializers.ModelSerializer):
         return ""
 
     def validate_file(self, value):
-        if value.size > MAX_FILE_SIZE:
-            raise serializers.ValidationError(f"File size must be under {MAX_FILE_SIZE // (1024*1024)}MB.")
-
-        mime_type, _ = mimetypes.guess_type(value.name)
-        allowed = ALLOWED_IMAGE_TYPES | ALLOWED_AUDIO_TYPES | ALLOWED_VIDEO_TYPES
-        if mime_type and mime_type not in allowed:
-            raise serializers.ValidationError(f"File type '{mime_type}' is not allowed.")
-
+        # Shares one implementation with MediaUploadView so the two upload paths
+        # can never drift apart on what they accept.
+        validate_upload(value)
         return value
 
 
