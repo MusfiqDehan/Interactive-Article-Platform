@@ -10,6 +10,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
 from common.permissions import IsAdminUser
+from common.throttles import AuthRateThrottle
 from common.views import BaseAPIView
 
 from .serializers import (
@@ -28,6 +29,7 @@ User = get_user_model()
 @extend_schema(tags=["Auth"])
 class CustomTokenObtainPairView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
+    throttle_classes = (AuthRateThrottle,)
 
 
 @extend_schema(tags=["Auth"])
@@ -35,6 +37,7 @@ class RegisterView(BaseAPIView):
     """POST /api/auth/register/"""
 
     permission_classes = (permissions.AllowAny,)
+    throttle_classes = (AuthRateThrottle,)
     serializer_class = RegisterSerializer
     pagination_class = None
 
