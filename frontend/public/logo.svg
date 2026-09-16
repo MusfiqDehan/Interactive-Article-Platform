@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">Storyloom</title>
+  <desc id="desc">An open book with an unfolding terracotta page and a small interactive detail.</desc>
+  <style>
+    .storyloom-page { transform-origin:32px 43px; animation:storyloom-unfold 1.4s ease-out both; }
+    .storyloom-detail { animation:storyloom-reveal 1.4s ease-out both; }
+    @keyframes storyloom-unfold { from { transform:skewY(12deg) scaleX(.55); } to { transform:skewY(0) scaleX(1); } }
+    @keyframes storyloom-reveal { 0%,45% { opacity:0; } 100% { opacity:1; } }
+    @media (prefers-reduced-motion:reduce) { .storyloom-page,.storyloom-detail { animation:none; } }
+  </style>
+  <rect x="1" y="1" width="62" height="62" rx="17" fill="#263e35"/>
+  <rect x="1.5" y="1.5" width="61" height="61" rx="16.5" fill="none" stroke="#ffffff" stroke-opacity=".16"/>
+  <path d="M13 18c8-1 14 2 19 6v25c-5-4-11-6-19-5z" fill="#f7f2e7"/>
+  <path d="M32 24c5-4 11-7 19-6v26c-8-1-14 1-19 5z" fill="#c1cfbd"/>
+  <path class="storyloom-page" d="M32 24c3-7 8-12 15-14v27c-7 2-12 6-15 12z" fill="#e99772"/>
+  <path d="M18 26c3 0 6 1 9 3m-9 4c3 0 6 1 9 3" fill="none" stroke="#263e35" stroke-width="1.7" stroke-linecap="round" opacity=".55"/>
+  <g class="storyloom-detail"><circle cx="49" cy="43" r="7" fill="#f7f2e7" stroke="#263e35" stroke-width="2"/><path d="M46.5 43h5M49 40.5v5" stroke="#b95835" stroke-width="1.6" stroke-linecap="round"/></g>
+</svg>
