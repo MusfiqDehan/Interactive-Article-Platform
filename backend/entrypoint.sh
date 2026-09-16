@@ -28,7 +28,14 @@ echo "Collecting static files"
 python manage.py collectstatic --noinput 2>/dev/null || true
 
 echo "Starting server"
+WORKERS="${GUNICORN_WORKERS:-4}"
+THREADS="${GUNICORN_THREADS:-4}"
 exec gunicorn config.wsgi:application \
     --bind 0.0.0.0:8003 \
-    --workers 3 \
-    --timeout 120
+    --workers "$WORKERS" \
+    --threads "$THREADS" \
+    --worker-class gthread \
+    --max-requests 2000 \
+    --max-requests-jitter 200 \
+    --timeout 120 \
+    --keep-alive 5
