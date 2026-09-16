@@ -17,6 +17,18 @@ DATABASES = {
         "PASSWORD": config("POSTGRES_PASSWORD"),
         "HOST": config("POSTGRES_HOST"),
         "PORT": config("POSTGRES_PORT", default="5432"),
+        # Recycle connections instead of opening a new one per request. 60s
+        # is short enough that a restarted Postgres does not leave workers
+        # holding dead sockets, long enough that a busy worker is not
+        # reconnecting on every page view.
+        "CONN_MAX_AGE": config("CONN_MAX_AGE", default=60, cast=int),
+        "CONN_HEALTH_CHECKS": True,
+        "OPTIONS": {
+            "connect_timeout": 5,
+            # Abort a runaway query rather than letting one listing of the
+            # archive hold a worker until gunicorn's timeout.
+            "options": "-c statement_timeout=15000",
+        },
     }
 }
 
@@ -57,6 +69,7 @@ REST_FRAMEWORK = {  # noqa: F405
         # everything else needs a credential to reach, and this is where
         # credentials are guessed.
         "auth": config("THROTTLE_AUTH", default="20/min"),
+        "studio": config("THROTTLE_STUDIO", default="180/min"),
     },
 }
 
