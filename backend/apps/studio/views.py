@@ -27,7 +27,7 @@ from apps.articles.models import Article
 from apps.articles.queries import ArticleScopeMixin
 from apps.categories.models import Category
 from apps.editorial.revisions import record_edit
-from apps.editorial.transitions import record
+from apps.editorial.transitions import purge_article, record
 from apps.media_library.models import MediaFile
 from apps.syndication.models import Placement
 from apps.taxonomy.models import TaggedItem
@@ -36,6 +36,7 @@ from common.cache import bump_content_version
 from common.concurrency import OptimisticConcurrencyMixin
 from common.pagination import StudioPagination
 from common.permissions import HasSiteRole, is_admin
+from common.throttles import StudioRateThrottle
 from common.views import BaseAPIView, TenantScopedAPIView
 
 from .serializers import (
@@ -57,6 +58,8 @@ from .serializers import (
 class StudioAPIView(TenantScopedAPIView):
     permission_classes = (IsAuthenticated, HasSiteRole)
     pagination_class = StudioPagination
+    throttle_classes = (StudioRateThrottle,)
+    required_site_role = "author"
 
 
 # ---------------------------------------------------------------------------
@@ -154,18 +157,7 @@ class StudioArticleDetailView(
         return self.destroy_object(self.get_object(slug=slug))
 
     def perform_destroy(self, instance):
-        site_id = instance.site_id
-        # Written before the delete: afterwards there is no article to name, and
-        # the FK is SET_NULL, so the entry survives on its denormalised label.
-        record(
-            site=instance.site,
-            action="delete",
-            user=self.request.user,
-            article=instance,
-            from_state=instance.status,
-            metadata={"slug": instance.slug},
-        )
-        instance.delete()
+        site_id = purge_article(instance, user=self.request.user)
         bump_content_version(site_id)
 
 
