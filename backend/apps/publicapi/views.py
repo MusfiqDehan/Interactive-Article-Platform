@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from django.contrib.contenttypes.models import ContentType
 from django.core.cache import cache
-from django.db.models import Count, Prefetch, Q
+from django.db.models import Count, Q
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.generics import get_object_or_404
@@ -26,7 +26,7 @@ from apps.categories.models import Category
 from apps.syndication.models import Placement
 from apps.taxonomy.models import Tag, TaggedItem
 from apps.tenancy.models import SiteSettings
-from common.cache import etag_for
+from common.cache import DEFAULT_PAGE_TTL, etag_for, public_cache_key, query_hash
 from common.pagination import PublicCursorPagination
 from common.permissions import HasValidApiKey
 from common.throttles import ApiKeyRateThrottle
@@ -106,11 +106,17 @@ class PlacementQuerysetMixin:
             if featured.lower() in ("1", "true", "yes"):
                 queryset = queryset.filter(article__is_featured=True)
         if search := params.get("q"):
-            queryset = queryset.filter(
-                Q(article__title__icontains=search)
-                | Q(article__excerpt__icontains=search)
-                | Q(article__plain_text__icontains=search)
-            )
+            article_ids = self._search_article_ids(search)
+            if article_ids is not None:
+                queryset = queryset.filter(article_id__in=article_ids)
+            else:
+                # Title/excerpt only. Scanning ``plain_text`` with ILIKE is a
+                # sequential read of every live article and does not belong on
+                # the public list path -- Meilisearch is the full-text engine.
+                queryset = queryset.filter(
+                    Q(article__title__icontains=search)
+                    | Q(article__excerpt__icontains=search)
+                )
         for slug in params.getlist("tag"):
             if not slug:
                 continue
@@ -121,6 +127,18 @@ class PlacementQuerysetMixin:
                 ).values("object_id")
             )
         return queryset
+
+    def _search_article_ids(self, query: str):
+        """Article pks from Meilisearch, or None when the engine is down."""
+        site = getattr(self.request, "site", None)
+        if site is None:
+            return None
+        from apps.search import client as search_client
+
+        result = search_client.search(site.pk, query, limit=100, offset=0)
+        if not result.get("available"):
+            return None
+        return [hit["id"] for hit in result.get("hits") or [] if "id" in hit]
 
 
 @extend_schema(tags=["Public"])
@@ -137,7 +155,19 @@ class PublicArticleListView(PublicAPIMixin, PlacementQuerysetMixin, BaseAPIView)
         return self.filtered_placements()
 
     def get(self, request):
-        return self.list_response(self.get_queryset(), filter=False)
+        site = getattr(request, "site", None)
+        if site is None:
+            return self.list_response(self.get_queryset(), filter=False)
+        key = public_cache_key(
+            site.pk, "article_list", query_hash(query=request.GET.dict())
+        )
+        cached = cache.get(key)
+        if cached is not None:
+            return Response(cached)
+        response = self.list_response(self.get_queryset(), filter=False)
+        if response.status_code == 200:
+            cache.set(key, response.data, DEFAULT_PAGE_TTL)
+        return response
 
 
 @extend_schema(tags=["Public"], responses=SlugEntrySerializer(many=True))
@@ -155,6 +185,10 @@ class PublicArticleSlugsView(PublicAPIMixin, PlacementQuerysetMixin, BaseAPIView
         site = getattr(request, "site", None)
         if site is None:
             return Response([])
+        key = public_cache_key(site.pk, "article_slugs")
+        cached = cache.get(key)
+        if cached is not None:
+            return Response(cached)
         # Built fresh rather than narrowing the shared `placements()` helper:
         # that helper select_relates author and category, and combining a
         # select_related with an `.only()` that omits those relations raises
@@ -167,7 +201,9 @@ class PublicArticleSlugsView(PublicAPIMixin, PlacementQuerysetMixin, BaseAPIView
             .only("path_slug", "published_at", "article__updated_at")
             .order_by("-published_at")
         )
-        return Response(SlugEntrySerializer(queryset, many=True).data)
+        payload = SlugEntrySerializer(queryset, many=True).data
+        cache.set(key, payload, DEFAULT_PAGE_TTL)
+        return Response(payload)
 
 
 @extend_schema(tags=["Public"])
@@ -194,8 +230,19 @@ class PublicArticleDetailView(PublicAPIMixin, PlacementQuerysetMixin, BaseAPIVie
         return self.placements()
 
     def get(self, request, slug):
+        site = getattr(request, "site", None)
+        cache_key = None
+        if site is not None:
+            cache_key = public_cache_key(site.pk, "article_detail", slug)
+            cached = cache.get(cache_key)
+            if cached is not None:
+                response = Response(cached)
+                response = self.finalize_response(request, response)
+                return self.check_not_modified(request, response)
         placement = self.get_object(path_slug=slug)
         response = Response(PublicArticleDetailSerializer(placement).data)
+        if cache_key is not None and response.status_code == 200:
+            cache.set(cache_key, response.data, DEFAULT_PAGE_TTL)
         response = self.finalize_response(request, response)
         return self.check_not_modified(request, response)
 
