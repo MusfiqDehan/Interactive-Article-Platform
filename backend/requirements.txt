@@ -10,3 +10,23 @@ nh3==0.2.20
 whitenoise==6.8.2
 gunicorn==23.0.0
 python-decouple==3.8
+
+# --- Async / background processing (Phase 0) ---
+celery[redis]==5.4.0
+redis==5.2.1
+django-redis==5.4.0
+django-celery-beat==2.7.0
+
+# --- Object storage (Phase 0) ---
+django-storages[s3]==1.14.4
+boto3==1.35.90
+
+# --- Outbound HTTP + retries (used from Phase 5 on) ---
+requests==2.32.3
+tenacity==9.0.0
+
+# --- Credential encryption (Phase 6) ---
+cryptography==44.0.0
+
+# --- Search (Phase 7) ---
+meilisearch==0.33.0
