@@ -21,6 +21,7 @@ from apps.editorial.views import (
     ArticleTransitionListView,
     ArticleTransitionView,
     AuditLogListView,
+    BulkDeleteView,
     BulkTransitionView,
     ReviewAssignmentDetailView,
     ReviewAssignmentListView,
@@ -93,6 +94,11 @@ article_patterns = [
         "articles/bulk-transition/",
         BulkTransitionView.as_view(),
         name="studio-article-bulk-transition",
+    ),
+    path(
+        "articles/bulk-delete/",
+        BulkDeleteView.as_view(),
+        name="studio-article-bulk-delete",
     ),
     path(
         "articles/<str:slug>/transition/",
