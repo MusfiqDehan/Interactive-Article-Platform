@@ -12,18 +12,22 @@ from django.db.models import Q
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from apps.articles.queries import ArticleScopeMixin
+from common.cache import bump_content_version
 from common.pagination import StudioPagination
 from common.permissions import HasSiteRole
+from common.throttles import StudioRateThrottle
 from common.views import TenantScopedAPIView
 
 from .models import AuditLogEntry, ReviewAssignment, ReviewComment
 from .revisions import create_revision, diff_snapshots, restore, snapshot_of
 from .serializers import (
     AuditLogEntrySerializer,
+    BulkDeleteRequestSerializer,
     BulkTransitionRequestSerializer,
     BulkTransitionResultSerializer,
     ReviewAssignmentSerializer,
@@ -38,6 +42,7 @@ from .transitions import (
     TransitionPermissionDenied,
     available,
     perform,
+    purge_article,
     record,
 )
 
@@ -45,6 +50,8 @@ from .transitions import (
 class EditorialAPIView(TenantScopedAPIView):
     permission_classes = (IsAuthenticated, HasSiteRole)
     pagination_class = StudioPagination
+    throttle_classes = (StudioRateThrottle,)
+    required_site_role = "author"
 
 
 class ArticleScopedView(ArticleScopeMixin, EditorialAPIView):
@@ -214,6 +221,95 @@ class BulkTransitionView(ArticleScopeMixin, EditorialAPIView):
                     after_publish.delay(article_id)
 
             transaction.on_commit(fan_out)
+
+        succeeded = sum(1 for r in results if r["ok"])
+        return Response(
+            {
+                "requested": len(slugs),
+                "succeeded": succeeded,
+                "failed": len(results) - succeeded,
+                "results": results,
+            }
+        )
+
+
+@extend_schema(
+    tags=["Editorial"],
+    request=BulkDeleteRequestSerializer,
+    responses=BulkTransitionResultSerializer,
+)
+class BulkDeleteView(ArticleScopeMixin, EditorialAPIView):
+    """POST /api/v1/studio/articles/bulk-delete/
+
+    Hard-delete, not Hide. Archive leaves the row so it can be restored;
+    this removes the article, its revisions, and its public URL. Same contract
+    as bulk-transition: always 200, per-row results, at most ``MAX_ITEMS``.
+    """
+
+    serializer_class = BulkTransitionResultSerializer
+    MAX_ITEMS = 100
+
+    def post(self, request):
+        payload = BulkDeleteRequestSerializer(data=request.data)
+        payload.is_valid(raise_exception=True)
+        slugs = payload.validated_data["slugs"]
+        reason = payload.validated_data.get("reason", "")
+
+        if len(slugs) > self.MAX_ITEMS:
+            return Response(
+                {"slugs": [f"At most {self.MAX_ITEMS} articles per request."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        by_slug = {a.slug: a for a in self.get_queryset().filter(slug__in=slugs)}
+        results = []
+        deleted_any = False
+
+        for slug in slugs:
+            article = by_slug.get(slug)
+            if article is None:
+                results.append(
+                    {
+                        "slug": slug,
+                        "ok": False,
+                        "code": "not_found",
+                        "detail": "No such article, or you cannot see it.",
+                    }
+                )
+                continue
+            try:
+                with transaction.atomic():
+                    self.check_object_permissions(request, article)
+                    purge_article(
+                        article,
+                        user=request.user,
+                        extra_metadata={
+                            "source": "bulk",
+                            **({"reason": reason} if reason else {}),
+                        },
+                    )
+            except PermissionDenied:
+                results.append(
+                    {
+                        "slug": slug,
+                        "ok": False,
+                        "code": "forbidden",
+                        "detail": "You may only delete articles you authored.",
+                    }
+                )
+            else:
+                deleted_any = True
+                results.append(
+                    {
+                        "slug": slug,
+                        "ok": True,
+                        "code": "ok",
+                        "detail": "",
+                    }
+                )
+
+        if deleted_any:
+            bump_content_version(self.site.pk)
 
         succeeded = sum(1 for r in results if r["ok"])
         return Response(

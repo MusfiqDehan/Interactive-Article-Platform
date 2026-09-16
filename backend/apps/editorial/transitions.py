@@ -173,7 +173,7 @@ TRANSITIONS: dict[str, Transition] = {
         ),
         Transition(
             name="publish",
-            label="Publish",
+            label="Make public",
             sources=frozenset({DRAFT, IN_REVIEW, APPROVED, SCHEDULED, ARCHIVED}),
             target=PUBLISHED,
             min_role="editor",
@@ -187,7 +187,7 @@ TRANSITIONS: dict[str, Transition] = {
         ),
         Transition(
             name="unpublish",
-            label="Unpublish",
+            label="Move to draft",
             sources=frozenset({PUBLISHED}),
             target=DRAFT,
             min_role="editor",
@@ -196,7 +196,7 @@ TRANSITIONS: dict[str, Transition] = {
         ),
         Transition(
             name="archive",
-            label="Archive",
+            label="Hide",
             sources=frozenset({DRAFT, IN_REVIEW, APPROVED, SCHEDULED, PUBLISHED}),
             target=ARCHIVED,
             min_role="editor",
@@ -375,6 +375,29 @@ def record(
         to_state=to_state,
         metadata=metadata or {},
     )
+
+
+def purge_article(article, *, user, extra_metadata: dict | None = None):
+    """Hard-delete ``article`` and leave an audit row that survives it.
+
+    The log FK is SET_NULL, so the entry is written *before* the delete and
+    keeps the slug in ``metadata``. Callers bump the site content version
+    themselves so a bulk purge can invalidate the cache once, not per row.
+    """
+    metadata = {"slug": article.slug}
+    if extra_metadata:
+        metadata.update(extra_metadata)
+    record(
+        site=article.site,
+        action="delete",
+        user=user,
+        article=article,
+        from_state=article.status,
+        metadata=metadata,
+    )
+    site_id = article.site_id
+    article.delete()
+    return site_id
 
 
 def legal_targets(status: str) -> Iterable[str]:
