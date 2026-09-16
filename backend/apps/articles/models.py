@@ -105,6 +105,12 @@ class Article(TenantModel, SEOMixin):
     class Meta:
         app_label = "articles"
         ordering = ["-published_at", "-created_at"]
+        indexes = [
+            models.Index(fields=["site", "is_live", "-published_at"], name="article_site_live_pub"),
+            models.Index(fields=["site", "status", "-updated_at"], name="article_site_status_upd"),
+            models.Index(fields=["site", "slug"], name="article_site_slug"),
+            models.Index(fields=["author", "status"], name="article_author_status"),
+        ]
 
     #: Recomputed on every save from other fields. Tracked explicitly so that a
     #: narrow ``save(update_fields=...)`` still persists them -- see below.
@@ -114,6 +120,14 @@ class Article(TenantModel, SEOMixin):
 
     def save(self, *args, **kwargs):
         derived = set(self.DERIVED_FIELDS)
+        previous_live = False
+        if self.pk and not self._state.adding:
+            previous_live = bool(
+                type(self)
+                .unscoped.filter(pk=self.pk)
+                .values_list("is_live", flat=True)
+                .first()
+            )
 
         if not self.slug:
             self.slug = unique_slug(
@@ -154,6 +168,11 @@ class Article(TenantModel, SEOMixin):
             )
 
         super().save(*args, **kwargs)
+
+        if self.site_id and (self.is_live or previous_live):
+            from common.cache import bump_content_version
+
+            bump_content_version(self.site_id)
 
     def _compute_content_hash(self) -> str:
         """Stable hash of the content JSON, independent of key ordering."""
