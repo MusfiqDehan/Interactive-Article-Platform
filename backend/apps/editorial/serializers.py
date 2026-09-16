@@ -148,6 +148,18 @@ class BulkTransitionRequestSerializer(serializers.Serializer):
     reason = serializers.CharField(required=False, allow_blank=True, default="")
 
 
+class BulkDeleteRequestSerializer(serializers.Serializer):
+    """Body of ``POST /articles/bulk-delete/``.
+
+    Delete is not a workflow transition -- Hide (``archive``) takes content
+    off the public site; this removes the rows. Kept as its own payload so
+    ``transition`` cannot be set to a made-up ``delete`` value.
+    """
+
+    slugs = serializers.ListField(child=serializers.CharField(), allow_empty=False)
+    reason = serializers.CharField(required=False, allow_blank=True, default="")
+
+
 class BulkTransitionRowSerializer(serializers.Serializer):
     slug = serializers.CharField()
     ok = serializers.BooleanField()
