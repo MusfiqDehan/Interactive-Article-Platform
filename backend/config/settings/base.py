@@ -2,6 +2,7 @@ import os
 from datetime import timedelta
 from pathlib import Path
 
+from corsheaders.defaults import default_headers as CORS_DEFAULT_HEADERS
 from decouple import config
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -150,6 +151,8 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "api_key": "600/min",
         "events": "120/min",
+        "auth": "30/min",
+        "studio": "300/min",
     },
 }
 
@@ -165,7 +168,7 @@ SIMPLE_JWT = {
 
 # DRF Spectacular
 SPECTACULAR_SETTINGS = {
-    "TITLE": "Interactive Articles API",
+    "TITLE": "Storyloom API",
     "DESCRIPTION": "A dynamic, interactive article system with rich content blocks, multimedia support, and interactive modal elements.",
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
@@ -181,6 +184,17 @@ SPECTACULAR_SETTINGS = {
 
 # CORS
 CORS_ALLOW_CREDENTIALS = True
+# Studio autosave sends ``If-Match`` (optimistic concurrency) and ``X-CMS-Site``
+# (tenant). django-cors-headers' default allow-list includes neither, so the
+# browser preflight rejects the PATCH and the editor shows a save error on
+# every article. ``ETag`` must be readable so clients can echo it back.
+CORS_ALLOW_HEADERS = (
+    *CORS_DEFAULT_HEADERS,
+    "if-match",
+    "if-none-match",
+    "x-cms-site",
+)
+CORS_EXPOSE_HEADERS = ("etag",)
 
 # File upload limits
 DATA_UPLOAD_MAX_MEMORY_SIZE = 52428800  # 50MB
