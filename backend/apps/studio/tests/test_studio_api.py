@@ -163,6 +163,52 @@ class TestArticles:
         assert "Their Published" in titles
         assert "Their Draft" not in titles
 
+    def test_author_cannot_patch_someone_elses_published_article(
+        self, auth_client, author, membership_factory, default_site, article_factory, user_factory
+    ):
+        membership_factory(author, default_site, role="author")
+        other = user_factory(role="author")
+        membership_factory(other, default_site, role="author")
+        article = article_factory(author=other, status="published", title="Theirs")
+        response = auth_client(author).patch(
+            f"{BASE}/articles/{article.slug}/",
+            {"title": "Hijacked"},
+            format="json",
+        )
+        assert response.status_code == 403
+        article.refresh_from_db()
+        assert article.title == "Theirs"
+
+    def test_editor_can_patch_someone_elses_article(
+        self, auth_client, author, membership_factory, default_site, article_factory, user_factory
+    ):
+        membership_factory(author, default_site, role="editor")
+        other = user_factory(role="author")
+        article = article_factory(author=other, status="published", title="Theirs")
+        response = auth_client(author).patch(
+            f"{BASE}/articles/{article.slug}/",
+            {"title": "Edited"},
+            format="json",
+        )
+        assert response.status_code == 200
+        article.refresh_from_db()
+        assert article.title == "Edited"
+
+    def test_viewer_cannot_list_articles(
+        self, auth_client, author, membership_factory, default_site
+    ):
+        membership_factory(author, default_site, role="viewer")
+        assert auth_client(author).get(f"{BASE}/articles/").status_code == 403
+
+    def test_membership_does_not_grant_another_site(
+        self, auth_client, author, membership_factory, default_site, other_site
+    ):
+        membership_factory(author, default_site, role="author")
+        response = auth_client(author).get(
+            f"{BASE}/articles/", HTTP_X_CMS_SITE=other_site.slug
+        )
+        assert response.status_code == 403
+
     def test_add_placement(self, auth_client, admin, article_factory, other_site):
         article = article_factory(status="published")
         response = auth_client(admin).post(
@@ -177,6 +223,24 @@ class TestArticles:
         )
         assert response.status_code == 201
         assert Placement.objects.filter(article=article, site=other_site).exists()
+
+    def test_preflight_allows_autosave_headers(self, api_client):
+        """If-Match is not in corsheaders' default allow-list.
+
+        Without it the browser blocks every PATCH, which surfaces in the
+        editor as 'Could not save' on every article.
+        """
+        response = api_client.options(
+            f"{BASE}/articles/any/",
+            HTTP_ORIGIN="http://localhost:3003",
+            HTTP_ACCESS_CONTROL_REQUEST_METHOD="PATCH",
+            HTTP_ACCESS_CONTROL_REQUEST_HEADERS=(
+                "authorization, content-type, if-match, x-cms-site"
+            ),
+        )
+        allowed = response.get("Access-Control-Allow-Headers", "").lower()
+        assert "if-match" in allowed
+        assert "x-cms-site" in allowed
 
 
 class TestApiKeys:
