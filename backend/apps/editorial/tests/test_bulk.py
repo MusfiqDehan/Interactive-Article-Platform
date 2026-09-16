@@ -181,3 +181,117 @@ class TestBulkTransition:
 
         theirs.refresh_from_db()
         assert theirs.status == "draft"
+
+
+DELETE_URL = f"{BASE}/articles/bulk-delete/"
+
+
+class TestBulkDelete:
+    def test_deletes_many(self, auth_client, editor, article_factory):
+        articles = [article_factory(status="draft") for _ in range(3)]
+        pks = [a.pk for a in articles]
+        response = auth_client(editor).post(
+            DELETE_URL,
+            {"slugs": [a.slug for a in articles]},
+            format="json",
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert (body["requested"], body["succeeded"], body["failed"]) == (3, 3, 0)
+        from apps.articles.models import Article
+
+        assert not Article.unscoped.filter(pk__in=pks).exists()
+
+    def test_deletes_published_and_hidden(self, auth_client, editor, article_factory):
+        """Complete delete is not limited to drafts -- Hide is the reversible action."""
+        live = article_factory(status="published")
+        hidden = article_factory(status="archived")
+        body = auth_client(editor).post(
+            DELETE_URL,
+            {"slugs": [live.slug, hidden.slug]},
+            format="json",
+        ).json()
+        assert body["succeeded"] == 2
+        from apps.articles.models import Article
+
+        assert not Article.unscoped.filter(pk__in=[live.pk, hidden.pk]).exists()
+
+    def test_one_missing_does_not_block_the_rest(
+        self, auth_client, editor, article_factory
+    ):
+        keep = article_factory(status="draft")
+        doomed = article_factory(status="draft")
+        body = auth_client(editor).post(
+            DELETE_URL,
+            {"slugs": [doomed.slug, "no-such-article"]},
+            format="json",
+        ).json()
+        rows = {row["slug"]: row for row in body["results"]}
+        assert rows[doomed.slug]["ok"] is True
+        assert rows["no-such-article"]["code"] == "not_found"
+        from apps.articles.models import Article
+
+        assert not Article.unscoped.filter(pk=doomed.pk).exists()
+        keep.refresh_from_db()
+
+    def test_author_cannot_delete_someone_elses_live_article(
+        self, auth_client, writer, article_factory
+    ):
+        """Authors see others' live work in the list, but visibility is not delete rights."""
+        mine = article_factory(status="draft", author=writer)
+        theirs = article_factory(status="published")
+        body = auth_client(writer).post(
+            DELETE_URL,
+            {"slugs": [mine.slug, theirs.slug]},
+            format="json",
+        ).json()
+        rows = {row["slug"]: row for row in body["results"]}
+        assert rows[mine.slug]["ok"] is True
+        assert rows[theirs.slug]["code"] == "forbidden"
+        from apps.articles.models import Article
+
+        assert not Article.unscoped.filter(pk=mine.pk).exists()
+        theirs.refresh_from_db()
+
+    def test_each_delete_is_audited(self, auth_client, editor, article_factory):
+        from apps.editorial.models import AuditLogEntry
+
+        articles = [article_factory(status="draft") for _ in range(2)]
+        slugs = [a.slug for a in articles]
+        auth_client(editor).post(DELETE_URL, {"slugs": slugs}, format="json")
+        for slug in slugs:
+            entry = AuditLogEntry.objects.get(action="delete", metadata__slug=slug)
+            assert entry.metadata["source"] == "bulk"
+            assert entry.article_id is None
+
+    def test_batch_size_is_capped(self, auth_client, editor):
+        response = auth_client(editor).post(
+            DELETE_URL,
+            {"slugs": [f"a-{n}" for n in range(101)]},
+            format="json",
+        )
+        assert response.status_code == 400
+
+    def test_empty_selection_is_rejected(self, auth_client, editor):
+        response = auth_client(editor).post(
+            DELETE_URL, {"slugs": []}, format="json"
+        )
+        assert response.status_code == 400
+
+    def test_is_tenant_scoped(
+        self, auth_client, editor, article_factory, other_site, user_factory
+    ):
+        author = user_factory(role="author")
+        mine = article_factory(status="draft")
+        theirs = article_factory(status="draft", site=other_site, author=author)
+        body = auth_client(editor).post(
+            DELETE_URL,
+            {"slugs": [mine.slug, theirs.slug]},
+            format="json",
+        ).json()
+        rows = {row["slug"]: row for row in body["results"]}
+        assert rows[theirs.slug]["code"] == "not_found"
+        theirs.refresh_from_db()
+        from apps.articles.models import Article
+
+        assert not Article.unscoped.filter(pk=mine.pk).exists()
