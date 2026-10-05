@@ -1,149 +1,111 @@
-"use client";
-
+import type { Metadata } from "next";
 import Link from "next/link";
-import { useParams } from "next/navigation";
-import { useEffect, useState, useCallback } from "react";
-import { ArrowLeft, BookOpen, ChevronLeft, ChevronRight } from "lucide-react";
-import api from "@/lib/api";
-import { normalizeMediaUrl } from "@/lib/media";
-import { Category, ArticleListItem, PaginatedResponse } from "@/lib/types";
 
-export default function CategoryDetailPage() {
-  const params = useParams();
-  const slug = decodeURIComponent(params.slug as string);
-  const [category, setCategory] = useState<Category | null>(null);
-  const [articles, setArticles] = useState<ArticleListItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
+import { ArticleCard } from "@/components/article/ArticleCard";
+import { getCategory, listArticles } from "@/lib/api.server";
+import { normalizeSlug } from "@/lib/slug";
 
-  const fetchArticles = useCallback(async (catId: number) => {
-    try {
-      const response = await api.get<PaginatedResponse<ArticleListItem>>(
-        `/articles/?category=${catId}&page=${page}&page_size=9`
-      );
-      setArticles(response.data.results);
-      setTotalPages(Math.ceil(response.data.count / 9));
-    } catch {
-      setArticles([]);
-    }
-  }, [page]);
+/**
+ * Rendered per request, deliberately -- no `generateStaticParams` here.
+ *
+ * This route paginates with a `?cursor=` token, and reading a search param is
+ * fundamentally incompatible with prerendering: the prerender has no request to
+ * read it from. Next 14 resolved that contradiction silently by prerendering the
+ * page and handing the component an empty `searchParams`, so **every cursor was
+ * ignored and page 2 of a category served page 1**. Next 16 raises
+ * DYNAMIC_SERVER_USAGE instead, which is how the bug surfaced.
+ *
+ * Dynamic rendering is cheap here because both reads below are served from the
+ * fetch cache (category 1h, listing 5m), so a request is a cache hit plus a
+ * render rather than an API round trip. The article detail route, which has no
+ * search params, keeps full static generation.
+ */
+export const dynamic = "force-dynamic";
 
-  useEffect(() => {
-    const fetchCategory = async () => {
-      try {
-        const response = await api.get(`/categories/${slug}/`);
-        setCategory(response.data);
-        await fetchArticles(response.data.id);
-      } catch {
-        setCategory(null);
-      } finally {
-        setIsLoading(false);
-      }
+/** Next 15+ passes both as Promises; Next 16 dropped the sync fallback. */
+type RouteProps = {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<{ cursor?: string }>;
+};
+
+export async function generateMetadata({
+  params,
+}: Pick<RouteProps, "params">): Promise<Metadata> {
+  try {
+    const category = await getCategory(normalizeSlug((await params).slug));
+    return {
+      title: category.name,
+      description:
+        category.description || `Articles filed under ${category.name}.`,
     };
-    if (slug) fetchCategory();
-  }, [slug, fetchArticles]);
-
-  if (isLoading) {
-    return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="animate-pulse space-y-6">
-          <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-24" />
-          <div className="h-8 bg-slate-200 dark:bg-slate-700 rounded w-1/3" />
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {[...Array(3)].map((_, i) => (
-              <div key={i} className="card h-72 bg-slate-200 dark:bg-slate-700" />
-            ))}
-          </div>
-        </div>
-      </div>
-    );
+  } catch {
+    return { title: "Category not found", robots: { index: false } };
   }
+}
 
-  if (!category) {
-    return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 text-center">
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-white mb-4">Category Not Found</h1>
-        <Link href="/categories" className="btn-primary">
-          <ArrowLeft size={18} className="mr-2" /> Back to Categories
-        </Link>
-      </div>
-    );
-  }
+export default async function CategoryPage({
+  params,
+  searchParams,
+}: RouteProps) {
+  const [{ slug: rawSlug }, { cursor }] = await Promise.all([
+    params,
+    searchParams,
+  ]);
+  const slug = normalizeSlug(rawSlug);
+  const [category, page] = await Promise.all([
+    getCategory(slug),
+    listArticles({ category: slug, cursor, page_size: 9 }),
+  ]);
+
+  const nextToken = page.next
+    ? new URL(page.next).searchParams.get("cursor")
+    : null;
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-      <Link
-        href="/categories"
-        className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-primary-600 dark:text-slate-400 dark:hover:text-primary-400 mb-8 transition-colors"
-      >
-        <ArrowLeft size={16} /> Back to Categories
-      </Link>
+    <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+      <nav aria-label="Breadcrumb" className="mb-6 text-sm text-slate-500">
+        <Link href="/categories" className="hover:text-primary-600">
+          Categories
+        </Link>
+        <span className="mx-2" aria-hidden="true">
+          /
+        </span>
+        <span className="text-slate-700 dark:text-slate-300">{category.name}</span>
+      </nav>
 
-      <div className="mb-10">
-        <h1 className="text-4xl font-bold text-slate-900 dark:text-white mb-4">{category.name}</h1>
+      <header className="mb-8">
+        <h1 className="font-display text-3xl font-bold text-slate-900 sm:text-4xl dark:text-slate-50">
+          {category.name}
+        </h1>
         {category.description && (
-          <p className="text-lg text-slate-500 dark:text-slate-400">{category.description}</p>
+          <p className="mt-2 text-slate-600 dark:text-slate-400">
+            {category.description}
+          </p>
         )}
-      </div>
+      </header>
 
-      {articles.length === 0 ? (
-        <div className="text-center py-20">
-          <BookOpen className="w-16 h-16 text-slate-300 dark:text-slate-600 mx-auto mb-4" />
-          <h3 className="text-xl font-semibold text-slate-600 dark:text-slate-400">
-            No articles in this category yet
-          </h3>
-        </div>
+      {page.results.length === 0 ? (
+        <p className="py-16 text-center text-slate-500">
+          No articles in this category yet.
+        </p>
       ) : (
-        <>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {articles.map((article) => (
-              <Link
-                key={article.id}
-                href={`/articles/${article.slug}`}
-                className="card overflow-hidden group hover:shadow-xl transition-all hover:-translate-y-1"
-              >
-                {article.featured_image ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={normalizeMediaUrl(article.featured_image)}
-                    alt={article.title}
-                    className="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-300"
-                  />
-                ) : (
-                  <div className="w-full h-48 bg-gradient-to-br from-primary-100 to-accent-100 dark:from-primary-900/30 dark:to-accent-900/30 flex items-center justify-center">
-                    <BookOpen className="w-12 h-12 text-primary-400" />
-                  </div>
-                )}
-                <div className="p-6">
-                  <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2 line-clamp-2 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors">
-                    {article.title}
-                  </h3>
-                  <p className="text-sm text-slate-500 dark:text-slate-400 line-clamp-2 mb-4">
-                    {article.excerpt}
-                  </p>
-                  <div className="flex items-center justify-between text-xs text-slate-400 dark:text-slate-500">
-                    <span>{article.author.first_name || article.author.username}</span>
-                    <span>{article.reading_time} min read</span>
-                  </div>
-                </div>
-              </Link>
-            ))}
-          </div>
-          {totalPages > 1 && (
-            <div className="flex items-center justify-center gap-2 mt-12">
-              <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} className="btn-secondary px-3 py-2">
-                <ChevronLeft size={18} />
-              </button>
-              <span className="px-4 py-2 text-sm text-slate-600 dark:text-slate-400">
-                Page {page} of {totalPages}
-              </span>
-              <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="btn-secondary px-3 py-2">
-                <ChevronRight size={18} />
-              </button>
-            </div>
-          )}
-        </>
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          {page.results.map((article, index) => (
+            <ArticleCard key={article.id} article={article} priority={index === 0} />
+          ))}
+        </div>
+      )}
+
+      {nextToken && (
+        <nav className="mt-10 flex justify-center" aria-label="Pagination">
+          <Link
+            href={`/categories/${encodeURIComponent(slug)}?cursor=${encodeURIComponent(nextToken)}`}
+            className="btn-secondary"
+            rel="next"
+          >
+            Next
+          </Link>
+        </nav>
       )}
     </div>
   );
