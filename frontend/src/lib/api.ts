@@ -1,3 +1,15 @@
+/**
+ * Client for `/api/auth/`.
+ *
+ * Once the general-purpose client for the whole legacy API; that surface is
+ * gone and this now serves authentication only, which is deliberately not
+ * versioned alongside the two content APIs -- both of them and the login flow
+ * share it, and moving it would invalidate every stored token.
+ *
+ * Content goes through `lib/api.server.ts` (public, server-side) or
+ * `lib/studio-api.ts` (authoring, client-side).
+ */
+
 import axios from "axios";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8003/api";
