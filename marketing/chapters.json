@@ -1,0 +1,62 @@
+[
+  {
+    "id": "open",
+    "title": "A new dimension",
+    "titleBn": "নতুন মাত্রা",
+    "t": 0.55
+  },
+  {
+    "id": "problem",
+    "title": "Flat pages",
+    "titleBn": "সমতল পাতা",
+    "t": 4.58
+  },
+  {
+    "id": "blocks",
+    "title": "Compose in blocks",
+    "titleBn": "ব্লকে সাজান",
+    "t": 10.61
+  },
+  {
+    "id": "interact",
+    "title": "On the page",
+    "titleBn": "একই পাতায়",
+    "t": 17.84
+  },
+  {
+    "id": "reader",
+    "title": "Readers stay",
+    "titleBn": "পাঠক থাকে",
+    "t": 23.99
+  },
+  {
+    "id": "impact",
+    "title": "Business impact",
+    "titleBn": "ব্যবসায়িক প্রভাব",
+    "t": 29.59
+  },
+  {
+    "id": "workflow",
+    "title": "Draft to publish",
+    "titleBn": "ড্রাফট থেকে প্রকাশ",
+    "t": 35.34
+  },
+  {
+    "id": "discover",
+    "title": "Made to be found",
+    "titleBn": "খুঁজে পাওয়ার যোগ্য",
+    "t": 39.52
+  },
+  {
+    "id": "bilingual",
+    "title": "English and Bangla",
+    "titleBn": "ইংরেজি ও বাংলা",
+    "t": 44.69
+  },
+  {
+    "id": "close",
+    "title": "Start your story",
+    "titleBn": "গল্প শুরু করুন",
+    "t": 49.47
+  }
+]
