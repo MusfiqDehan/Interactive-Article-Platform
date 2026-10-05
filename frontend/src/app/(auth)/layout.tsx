@@ -1,10 +1,16 @@
 import Header from "@/components/layout/Header";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Your account",
+  robots: { index: false, follow: false },
+};
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950">
+    <div className="sl-shell min-h-screen flex flex-col">
       <Header />
-      <main className="flex-1 flex items-center justify-center p-4">{children}</main>
+      <main className="sl-auth-main">{children}</main>
     </div>
   );
 }
