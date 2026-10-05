@@ -1,9 +1,12 @@
+name: storyloom
+
 services:
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: ia-backend
+    image: storyloom-backend
+    container_name: storyloom-backend
     env_file: .env.prod
     environment:
       - DJANGO_SETTINGS_MODULE=config.settings.production
@@ -19,7 +22,15 @@ services:
       - app_network
       - traefik_proxy
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; req=urllib.request.Request('http://localhost:8003/admin/login/', headers={'Host':'interactive-articles-api.musfiqdehan.com'}); urllib.request.urlopen(req)"]
+      # `/healthz` checks the database only, deliberately: a Redis outage
+      # degrades caching but the site must stay up, and a readiness probe that
+      # fails on Redis would have Docker restart a perfectly serving container.
+      # (`/readyz` checks both and is what a deploy gate should use.)
+      #
+      # This used to curl `/admin/login/` -- a page that no longer exists, and
+      # which was never a health signal in the first place: it renders fine
+      # while the database is unreachable.
+      test: ["CMD", "python", "-c", "import urllib.request; req=urllib.request.Request('http://localhost:8003/healthz', headers={'Host':'interactive-articles-api.musfiqdehan.com'}); urllib.request.urlopen(req)"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -27,10 +38,10 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=traefik_proxy"
-      - "traefik.http.routers.ia-backend.rule=Host(`interactive-articles-api.musfiqdehan.com`)"
-      - "traefik.http.routers.ia-backend.entrypoints=websecure"
-      - "traefik.http.routers.ia-backend.tls=true"
-      - "traefik.http.services.ia-backend.loadbalancer.server.port=8003"
+      - "traefik.http.routers.storyloom-backend.rule=Host(`interactive-articles-api.musfiqdehan.com`)"
+      - "traefik.http.routers.storyloom-backend.entrypoints=websecure"
+      - "traefik.http.routers.storyloom-backend.tls=true"
+      - "traefik.http.services.storyloom-backend.loadbalancer.server.port=8003"
     restart: unless-stopped
 
   frontend:
@@ -40,7 +51,8 @@ services:
       args:
         - NEXT_PUBLIC_API_URL=https://interactive-articles-api.musfiqdehan.com/api
         - NEXT_PUBLIC_API_BASE_URL=https://interactive-articles-api.musfiqdehan.com/api
-    container_name: ia-frontend
+    image: storyloom-frontend
+    container_name: storyloom-frontend
     environment:
       - NODE_ENV=production
       - HOSTNAME=0.0.0.0
@@ -64,15 +76,15 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=traefik_proxy"
-      - "traefik.http.routers.ia-frontend.rule=Host(`interactive-articles.musfiqdehan.com`)"
-      - "traefik.http.routers.ia-frontend.entrypoints=websecure"
-      - "traefik.http.routers.ia-frontend.tls=true"
-      - "traefik.http.services.ia-frontend.loadbalancer.server.port=3003"
+      - "traefik.http.routers.storyloom-frontend.rule=Host(`interactive-articles.musfiqdehan.com`)"
+      - "traefik.http.routers.storyloom-frontend.entrypoints=websecure"
+      - "traefik.http.routers.storyloom-frontend.tls=true"
+      - "traefik.http.services.storyloom-frontend.loadbalancer.server.port=3003"
     restart: unless-stopped
 
   db:
     image: postgres:16-alpine
-    container_name: ia-db
+    container_name: storyloom-db
     env_file: .env.prod
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -93,7 +105,7 @@ volumes:
 
 networks:
   app_network:
-    name: iap_network
+    name: storyloom_network
     driver: bridge
   traefik_proxy:
     external: true
