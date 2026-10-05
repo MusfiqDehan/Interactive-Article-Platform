@@ -2,6 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * shadcn/Radix tokens are *mapped onto* the existing variables rather than
+ * replacing them. `shadcn init` wants to overwrite this file wholesale, which
+ * would break `.btn-primary` / `.card` / `.input-field` -- used across the
+ * public site and every remaining client page. The existing values were already
+ * space-separated RGB triples, which is exactly the format shadcn expects, so
+ * the bridge is a rename and not a conversion.
+ */
 @layer base {
   :root {
     --background: 255 255 255;
@@ -11,6 +19,21 @@
     --border: 226 232 240;
     --muted: 241 245 249;
     --muted-foreground: 100 116 139;
+
+    /* shadcn additions, in the same triple format. */
+    --popover: 255 255 255;
+    --popover-foreground: 15 23 42;
+    --primary: 37 99 235;
+    --primary-foreground: 248 250 252;
+    --secondary: 241 245 249;
+    --secondary-foreground: 15 23 42;
+    --accent: 241 245 249;
+    --accent-foreground: 15 23 42;
+    --destructive: 220 38 38;
+    --destructive-foreground: 248 250 252;
+    --input: 226 232 240;
+    --ring: 59 130 246;
+    --radius: 0.5rem;
   }
 
   .dark {
@@ -21,6 +44,19 @@
     --border: 51 65 85;
     --muted: 30 41 59;
     --muted-foreground: 148 163 184;
+
+    --popover: 30 41 59;
+    --popover-foreground: 248 250 252;
+    --primary: 59 130 246;
+    --primary-foreground: 15 23 42;
+    --secondary: 51 65 85;
+    --secondary-foreground: 248 250 252;
+    --accent: 51 65 85;
+    --accent-foreground: 248 250 252;
+    --destructive: 239 68 68;
+    --destructive-foreground: 248 250 252;
+    --input: 51 65 85;
+    --ring: 59 130 246;
   }
 
   body {
@@ -58,9 +94,34 @@
 
 .codex-editor__redactor {
   padding-bottom: 100px !important;
+  overflow: visible !important;
 }
 
-/* Editor.js plus (+) button — light theme */
+.codex-holder,
+.codex-editor {
+  overflow: visible;
+  isolation: isolate;
+}
+
+/*
+ * Toolbar + toolbox must paint above the Outline / right rail. Editor.js
+ * parks the plus button to the left of the block; without a high z-index
+ * the aside covers the picker and its items.
+ */
+.ce-toolbar,
+.ce-toolbar__actions,
+.ce-toolbox,
+.ce-popover,
+.ce-popover__container,
+.ce-inline-toolbar,
+.ce-conversion-toolbar,
+.ce-settings {
+  z-index: 80 !important;
+  overflow: visible;
+  pointer-events: auto;
+}
+
+/* Plus (+) — do not force `display`; Editor.js toggles it with display:none. */
 .ce-toolbar__plus {
   width: 32px !important;
   height: 32px !important;
@@ -68,7 +129,6 @@
   background-color: #e2e8f0 !important;
   color: #1e293b !important;
   border: 1.5px solid #94a3b8 !important;
-  display: flex !important;
   align-items: center !important;
   justify-content: center !important;
   transition: background-color 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s !important;
@@ -87,7 +147,6 @@
   height: 16px !important;
 }
 
-/* Editor.js plus button — dark theme */
 .dark .ce-toolbar__plus {
   background-color: #334155 !important;
   color: #f1f5f9 !important;
@@ -102,7 +161,6 @@
   box-shadow: 0 0 0 3px rgba(59,130,246,0.35) !important;
 }
 
-/* Editor.js drag handle (6-dot icon) — light theme */
 .ce-toolbar__settings-btn {
   width: 32px !important;
   height: 32px !important;
@@ -122,7 +180,6 @@
   fill: currentColor !important;
 }
 
-/* Editor.js drag handle (6-dot icon) — dark theme */
 .dark .ce-toolbar__settings-btn {
   color: #94a3b8 !important;
 }
@@ -136,40 +193,138 @@
   fill: currentColor !important;
 }
 
-/* Editor.js toolbox (block picker) — light theme */
-.ce-toolbox {
-  background-color: #ffffff !important;
-  border: 1px solid #e2e8f0 !important;
-  border-radius: 10px !important;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.1) !important;
+/*
+ * Toolbox is a popover in Editor.js 2.30+. The painted panel is
+ * `.ce-popover__container`; items are `.ce-popover-item`. Colour tokens on
+ * `.ce-popover` are what the library actually reads.
+ */
+.ce-popover,
+.ce-toolbox,
+.ce-inline-toolbar,
+.ce-conversion-toolbar,
+.ce-settings {
+  --color-background: #ffffff;
+  --color-border: #e2e8f0;
+  --color-shadow: rgba(15, 23, 42, 0.12);
+  --color-text-primary: #1e293b;
+  --color-text-secondary: #64748b;
+  --color-background-item-hover: #eff6ff;
+  --color-background-item-focus: #dbeafe;
+  --icon-color: #475569;
 }
 
-.ce-toolbox__button {
-  color: #374151 !important;
+.ce-toolbox,
+.ce-popover__container,
+.ce-inline-toolbar,
+.ce-conversion-toolbar,
+.ce-settings {
+  background-color: var(--color-background) !important;
+  border: 1px solid var(--color-border) !important;
+  border-radius: 10px !important;
+  box-shadow: 0 8px 24px var(--color-shadow) !important;
+  color: var(--color-text-primary) !important;
+}
+
+.ce-toolbox__button,
+.ce-popover__item,
+.ce-popover-item,
+.ce-popover-item__title,
+.ce-popover-item__secondary-title {
+  color: var(--color-text-primary) !important;
+  border-radius: 6px !important;
+}
+
+.ce-popover-item__icon {
+  background-color: #f1f5f9 !important;
+  color: var(--icon-color) !important;
   border-radius: 6px !important;
 }
 
 .ce-toolbox__button:hover,
-.ce-toolbox__button--active {
-  background-color: #eff6ff !important;
+.ce-toolbox__button--active,
+.ce-popover__item:hover,
+.ce-popover__item--focused,
+.ce-popover-item:hover,
+.ce-popover-item--focused,
+.ce-popover-item--active {
+  background-color: var(--color-background-item-hover) !important;
   color: #1d4ed8 !important;
 }
 
-/* Editor.js toolbox — dark theme */
-.dark .ce-toolbox {
-  background-color: #1e293b !important;
-  border-color: #334155 !important;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.5) !important;
+.cdx-search-field,
+.ce-popover__search,
+.cdx-search-field__input {
+  background-color: #f8fafc !important;
+  color: var(--color-text-primary) !important;
+  border-color: var(--color-border) !important;
 }
 
-.dark .ce-toolbox__button {
+.ce-popover-item-separator__line {
+  background-color: var(--color-border) !important;
+}
+
+.dark .ce-popover,
+.dark .ce-toolbox,
+.dark .ce-inline-toolbar,
+.dark .ce-conversion-toolbar,
+.dark .ce-settings {
+  --color-background: #1e293b;
+  --color-border: #475569;
+  --color-shadow: rgba(0, 0, 0, 0.55);
+  --color-text-primary: #f1f5f9;
+  --color-text-secondary: #94a3b8;
+  --color-background-item-hover: #1e3a5f;
+  --color-background-item-focus: #1e3a8a;
+  --icon-color: #e2e8f0;
+}
+
+.dark .ce-toolbox,
+.dark .ce-popover__container,
+.dark .ce-inline-toolbar,
+.dark .ce-conversion-toolbar,
+.dark .ce-settings {
+  background-color: #1e293b !important;
+  border-color: #475569 !important;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.55) !important;
+  color: #f1f5f9 !important;
+}
+
+.dark .ce-toolbox__button,
+.dark .ce-popover__item,
+.dark .ce-popover-item,
+.dark .ce-popover-item__title,
+.dark .ce-popover-item__secondary-title,
+.dark .ce-popover__nothing-found-message {
+  color: #f1f5f9 !important;
+}
+
+.dark .ce-popover-item__icon {
+  background-color: #334155 !important;
   color: #e2e8f0 !important;
+  box-shadow: none !important;
 }
 
 .dark .ce-toolbox__button:hover,
-.dark .ce-toolbox__button--active {
+.dark .ce-toolbox__button--active,
+.dark .ce-popover__item:hover,
+.dark .ce-popover__item--focused,
+.dark .ce-popover-item:hover,
+.dark .ce-popover-item--focused,
+.dark .ce-popover-item--active {
   background-color: #1e3a5f !important;
-  color: #60a5fa !important;
+  color: #93c5fd !important;
+}
+
+.dark .cdx-search-field,
+.dark .ce-popover__search,
+.dark .cdx-search-field__input {
+  background-color: #0f172a !important;
+  color: #f1f5f9 !important;
+  border-color: #475569 !important;
+}
+
+.dark .ce-popover-item-separator__line {
+  background-color: #475569 !important;
 }
 
 /* Scrollbar styles */
