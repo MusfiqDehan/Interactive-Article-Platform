@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth";
-import api from "@/lib/api";
+import { listArticles } from "@/lib/studio-api";
 import { FileText, Eye, BookOpen } from "lucide-react";
 
 export default function DashboardPage() {
@@ -10,16 +10,25 @@ export default function DashboardPage() {
   const [stats, setStats] = useState({ total: 0, published: 0, views: 0 });
 
   useEffect(() => {
+    // Three counts from three `count`-only requests rather than a dedicated
+    // stats endpoint. The removed legacy `/articles/stats/` summed in Python
+    // across the whole table; asking the database for three counts with
+    // `page_size=1` is both cheaper and correctly tenant-scoped.
     const fetchStats = async () => {
       try {
-        const res = await api.get("/articles/stats/");
+        const [all, published] = await Promise.all([
+          listArticles({ page_size: 1 }),
+          listArticles({ page_size: 1, status: "published" }),
+        ]);
+        const recent = await listArticles({ page_size: 100 });
         setStats({
-          total: res.data.total_articles || 0,
-          published: res.data.published_articles || 0,
-          views: res.data.total_views || 0,
+          total: all.count,
+          published: published.count,
+          views: recent.results.reduce((sum, a) => sum + (a.views_count || 0), 0),
         });
       } catch {
-        // silent
+        // A dashboard that cannot count is still a usable dashboard; the zeroes
+        // it already shows are the honest answer to "we do not know".
       }
     };
     fetchStats();
@@ -27,10 +36,10 @@ export default function DashboardPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">
+      <h1 className="text-2xl font-bold text-[var(--sl-ink)] mb-2">
         Welcome back, {user?.first_name || user?.username}!
       </h1>
-      <p className="text-slate-500 dark:text-slate-400 mb-8">
+      <p className="text-[var(--sl-muted)] mb-8">
         Here&apos;s an overview of your activity.
       </p>
 
@@ -41,10 +50,10 @@ export default function DashboardPage() {
               <FileText className="w-6 h-6 text-blue-600 dark:text-blue-400" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-slate-900 dark:text-white">
+              <p className="text-2xl font-bold text-[var(--sl-ink)]">
                 {stats.total}
               </p>
-              <p className="text-sm text-slate-500 dark:text-slate-400">
+              <p className="text-sm text-[var(--sl-muted)]">
                 Total Articles
               </p>
             </div>
@@ -57,10 +66,10 @@ export default function DashboardPage() {
               <BookOpen className="w-6 h-6 text-green-600 dark:text-green-400" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-slate-900 dark:text-white">
+              <p className="text-2xl font-bold text-[var(--sl-ink)]">
                 {stats.published}
               </p>
-              <p className="text-sm text-slate-500 dark:text-slate-400">
+              <p className="text-sm text-[var(--sl-muted)]">
                 Published
               </p>
             </div>
@@ -73,10 +82,10 @@ export default function DashboardPage() {
               <Eye className="w-6 h-6 text-purple-600 dark:text-purple-400" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-slate-900 dark:text-white">
+              <p className="text-2xl font-bold text-[var(--sl-ink)]">
                 {stats.views}
               </p>
-              <p className="text-sm text-slate-500 dark:text-slate-400">
+              <p className="text-sm text-[var(--sl-muted)]">
                 Total Views
               </p>
             </div>
