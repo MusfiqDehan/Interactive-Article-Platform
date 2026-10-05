@@ -1,4 +1,4 @@
-# Interactive Articles Platform
+# Storyloom — Interactive Publishing
 
 A full-stack web application for creating and viewing interactive articles with modal/popup-based content elements.
 
