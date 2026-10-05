@@ -36,23 +36,23 @@ export default function ProfilePage() {
 
   return (
     <div className="max-w-2xl">
-      <h1 className="text-2xl font-bold text-slate-900 dark:text-white mb-8">
+      <h1 className="text-2xl font-bold text-[var(--sl-ink)] mb-8">
         Profile Settings
       </h1>
 
       {/* Avatar placeholder */}
       <div className="flex items-center gap-4 mb-8">
-        <div className="w-20 h-20 bg-primary-100 dark:bg-primary-900/30 rounded-full flex items-center justify-center">
-          <User className="w-10 h-10 text-primary-600 dark:text-primary-400" />
+        <div className="w-20 h-20 bg-[var(--sl-soft)] dark:bg-primary-900/30 rounded-full flex items-center justify-center">
+          <User className="w-10 h-10 text-[var(--sl-accent)]" />
         </div>
         <div>
-          <p className="font-semibold text-slate-900 dark:text-white">
+          <p className="font-semibold text-[var(--sl-ink)]">
             {user?.username}
           </p>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
+          <p className="text-sm text-[var(--sl-muted)]">
             {user?.email}
           </p>
-          <p className="text-xs text-slate-400 capitalize">{user?.role}</p>
+          <p className="text-xs text-[var(--sl-muted)] capitalize">{user?.role}</p>
         </div>
       </div>
 
@@ -71,7 +71,7 @@ export default function ProfilePage() {
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+            <label className="block text-sm font-medium text-[var(--sl-ink)] mb-2">
               First Name
             </label>
             <input
@@ -82,7 +82,7 @@ export default function ProfilePage() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+            <label className="block text-sm font-medium text-[var(--sl-ink)] mb-2">
               Last Name
             </label>
             <input
@@ -95,7 +95,7 @@ export default function ProfilePage() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+          <label className="block text-sm font-medium text-[var(--sl-ink)] mb-2">
             Bio
           </label>
           <textarea
