@@ -1,14 +1,25 @@
 "use client";
 
 import { useTheme } from "next-themes";
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import { Sun, Moon } from "lucide-react";
+
+/**
+ * The resolved theme is only knowable in the browser, so the first client paint
+ * must match the server's. `useSyncExternalStore` states that directly -- a
+ * different snapshot on server and client -- instead of the older
+ * `useState(false)` + `useEffect(setMounted)` dance, which React 19 flags
+ * because setting state in an effect body forces a second render pass.
+ */
+const subscribe = () => () => {};
 
 export default function ThemeToggle() {
   const { theme, setTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => setMounted(true), []);
+  const mounted = useSyncExternalStore(
+    subscribe,
+    () => true, // client
+    () => false, // server + hydration
+  );
 
   if (!mounted) {
     return <div className="w-9 h-9" />;
