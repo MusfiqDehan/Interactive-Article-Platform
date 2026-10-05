@@ -1,159 +1,205 @@
-"use client";
-
-import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowLeft, Clock, Eye, Calendar, User } from "lucide-react";
-import api from "@/lib/api";
+
+import { AnnotationAppendix } from "@/components/article/annotations/AnnotationAppendix";
+import { AnnotationProvider } from "@/components/article/annotations/AnnotationProvider";
+import { ReadingTracker } from "@/components/article/ReadingTracker";
+import { ServerBlockRenderer } from "@/components/article/ServerBlockRenderer";
+import { JsonLd } from "@/components/seo/JsonLd";
+import { getAllSlugs, getArticle, getSite } from "@/lib/api.server";
 import { normalizeMediaUrl } from "@/lib/media";
-import { Article } from "@/lib/types";
-import BlockRenderer from "@/components/article/BlockRenderer";
+import { collectArticleSchemas } from "@/lib/schema";
+import { normalizeSlug } from "@/lib/slug";
 
-export default function ArticleDetailPage() {
-  const params = useParams();
-  const slug = decodeURIComponent(params.slug as string);
-  const [article, setArticle] = useState<Article | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+/**
+ * Article detail -- the page that matters most for search.
+ *
+ * Previously `"use client"` with a useEffect fetch, so the title, body, author
+ * and dates existed only after hydration and a crawler's first paint was a
+ * skeleton. Now fully server-rendered with ISR.
+ */
 
-  useEffect(() => {
-    const fetchArticle = async () => {
-      try {
-        const response = await api.get(`/articles/${slug}/`);
-        setArticle(response.data);
-        // Increment view count
-        api.post(`/articles/${slug}/view/`).catch(() => {});
-      } catch {
-        setArticle(null);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    if (slug) fetchArticle();
-  }, [slug]);
+export const revalidate = 3600;
+/** Slugs not in generateStaticParams still render on demand, then cache. */
+export const dynamicParams = true;
 
-  if (isLoading) {
-    return (
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="animate-pulse space-y-6">
-          <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-24" />
-          <div className="h-10 bg-slate-200 dark:bg-slate-700 rounded w-3/4" />
-          <div className="flex gap-4">
-            <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-32" />
-            <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-24" />
-          </div>
-          <div className="h-64 bg-slate-200 dark:bg-slate-700 rounded-xl" />
-          <div className="space-y-3">
-            <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded" />
-            <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-5/6" />
-            <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-4/6" />
-          </div>
-        </div>
-      </div>
-    );
+export async function generateStaticParams() {
+  try {
+    const slugs = await getAllSlugs();
+    // Prerender the most recent 500; the long tail renders on first request.
+    // Slugs are returned DECODED -- Next percent-encodes when building paths,
+    // and pre-encoding here would double-encode Bengali slugs into 404s.
+    return slugs.slice(0, 500).map((entry) => ({ slug: entry.slug }));
+  } catch {
+    // A build must not fail because the API was briefly unreachable.
+    return [];
+  }
+}
+
+/**
+ * Next 15 made `params` a Promise (and Next 16 removed the sync fallback), so
+ * it must be awaited before `normalizeSlug` sees it -- reading `.slug` off the
+ * promise yields `undefined`, which here would mean every article 404s.
+ */
+type RouteParams = { params: Promise<{ slug: string }> };
+
+export async function generateMetadata({
+  params,
+}: RouteParams): Promise<Metadata> {
+  const slug = normalizeSlug((await params).slug);
+
+  let article;
+  try {
+    article = await getArticle(slug);
+  } catch {
+    return { title: "Article not found", robots: { index: false, follow: false } };
   }
 
-  if (!article) {
-    return (
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-20 text-center">
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-white mb-4">
-          Article Not Found
-        </h1>
-        <p className="text-slate-500 dark:text-slate-400 mb-6">
-          The article you&apos;re looking for doesn&apos;t exist or has been removed.
-        </p>
-        <Link href="/articles" className="btn-primary">
-          <ArrowLeft size={18} className="mr-2" />
-          Back to Articles
-        </Link>
-      </div>
-    );
-  }
+  const { seo } = article;
+
+  return {
+    title: seo.meta_title,
+    description: seo.meta_description,
+    alternates: {
+      canonical: seo.canonical_url,
+      // `languages` becomes the <link rel="alternate" hreflang="..."> set.
+      // The backend includes this article in its own alternates, because a
+      // self-referential set is what search engines require -- listing only
+      // the *other* languages reads as the obvious thing to do and silently
+      // disables the whole cluster.
+      ...(article.alternates && article.alternates.length > 1
+        ? {
+            languages: Object.fromEntries(
+              article.alternates.map((entry) => [entry.locale, entry.url]),
+            ),
+          }
+        : {}),
+    },
+    robots: {
+      index: seo.robots_index,
+      follow: seo.robots_follow,
+      nocache: seo.robots_noarchive,
+      googleBot: {
+        index: seo.robots_index,
+        follow: seo.robots_follow,
+        noimageindex: seo.robots_noimageindex,
+        "max-snippet": seo.max_snippet,
+        "max-image-preview": seo.max_image_preview,
+        "max-video-preview": seo.max_video_preview,
+      },
+    },
+    openGraph: {
+      type: "article",
+      title: seo.og_title,
+      description: seo.og_description,
+      url: seo.canonical_url,
+      siteName: article.site.name,
+      locale: seo.og_locale || article.locale,
+      publishedTime: article.published_at ?? undefined,
+      modifiedTime: article.updated_at,
+      authors: [article.author.name],
+      section: article.category?.name,
+      images: seo.og_image
+        ? [{ url: seo.og_image, width: 1200, height: 630, alt: seo.og_image_alt || article.title }]
+        : article.featured_image
+          ? [{ url: article.featured_image, width: 1200, height: 630, alt: article.title }]
+          : undefined,
+    },
+    twitter: {
+      card: seo.twitter_card,
+      title: seo.twitter_title,
+      description: seo.twitter_description,
+      images: seo.twitter_image ? [seo.twitter_image] : undefined,
+      site: seo.twitter_site || undefined,
+    },
+  };
+}
+
+export default async function ArticlePage({ params }: RouteParams) {
+  const slug = normalizeSlug((await params).slug);
+  // Parallel: neither depends on the other.
+  const [article, site] = await Promise.all([getArticle(slug), getSite()]);
+
+  const publishedLabel = article.published_at
+    ? new Date(article.published_at).toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      })
+    : null;
 
   return (
-    <article className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-      {/* Back link */}
-      <Link
-        href="/articles"
-        className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-primary-600 dark:text-slate-400 dark:hover:text-primary-400 mb-8 transition-colors"
-      >
-        <ArrowLeft size={16} />
-        Back to Articles
-      </Link>
+    <>
+      <JsonLd data={collectArticleSchemas(article, site)} />
+      <ReadingTracker articleId={article.id} />
 
-      {/* Article header */}
-      <header className="mb-10">
-        <div className="flex flex-wrap items-center gap-3 mb-4">
+      <article className="mx-auto max-w-4xl px-4 py-10 sm:px-6 lg:px-8">
+        <header className="mb-8">
+          <Link
+            href="/articles"
+            className="mb-6 inline-flex items-center gap-1 text-sm text-slate-500 transition hover:text-primary-600 dark:text-slate-400"
+          >
+            ← Back to articles
+          </Link>
+
           {article.category && (
-            <Link
-              href={`/categories/${article.category.slug}`}
-              className="px-3 py-1 rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 text-xs font-medium hover:bg-primary-200 dark:hover:bg-primary-900/50 transition-colors"
-            >
-              {article.category.name}
-            </Link>
+            <nav aria-label="Breadcrumb" className="mb-4 flex flex-wrap gap-2 text-sm">
+              <Link
+                href={`/categories/${encodeURIComponent(article.category.slug)}`}
+                className="rounded-full bg-primary-50 px-3 py-1 font-medium text-primary-700 transition hover:bg-primary-100 dark:bg-primary-900/30 dark:text-primary-300"
+              >
+                {article.category.name}
+              </Link>
+            </nav>
           )}
-          {article.subcategory && (
-            <span className="px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-xs font-medium">
-              {article.subcategory.name}
-            </span>
+
+          <h1 className="font-display text-3xl font-bold leading-tight text-slate-900 sm:text-4xl lg:text-5xl dark:text-slate-50">
+            {article.title}
+          </h1>
+
+          {article.excerpt && (
+            <p className="mt-4 text-lg text-slate-600 dark:text-slate-300">
+              {article.excerpt}
+            </p>
           )}
-        </div>
 
-        <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold text-slate-900 dark:text-white mb-6 leading-tight">
-          {article.title}
-        </h1>
-
-        {article.excerpt && (
-          <p className="text-lg text-slate-500 dark:text-slate-400 mb-6">
-            {article.excerpt}
-          </p>
-        )}
-
-        <div className="flex flex-wrap items-center gap-6 text-sm text-slate-500 dark:text-slate-400 pb-8 border-b border-slate-200 dark:border-slate-800">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center">
-              <User size={16} className="text-primary-600 dark:text-primary-400" />
-            </div>
-            <span>{article.author.first_name || article.author.username}</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <Calendar size={16} />
-            <span>
-              {article.published_at
-                ? new Date(article.published_at).toLocaleDateString("en-US", {
-                    year: "numeric",
-                    month: "long",
-                    day: "numeric",
-                  })
-                : "Draft"}
+          <div className="mt-6 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-slate-500 dark:text-slate-400">
+            <span className="font-medium text-slate-700 dark:text-slate-200">
+              {article.author.name}
             </span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <Clock size={16} />
+            {publishedLabel && article.published_at && (
+              <>
+                <span aria-hidden="true">·</span>
+                {/* Machine-readable date for structured data and crawlers. */}
+                <time dateTime={article.published_at}>{publishedLabel}</time>
+              </>
+            )}
+            <span aria-hidden="true">·</span>
             <span>{article.reading_time} min read</span>
           </div>
-          <div className="flex items-center gap-1.5">
-            <Eye size={16} />
-            <span>{article.views_count} views</span>
-          </div>
-        </div>
-      </header>
+        </header>
 
-      {/* Featured image */}
-      {article.featured_image && (
-        <div className="mb-10 rounded-2xl overflow-hidden">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
+        {article.featured_image && (
+          // eslint-disable-next-line @next/next/no-img-element
           <img
             src={normalizeMediaUrl(article.featured_image)}
-            alt={article.title}
-            className="w-full h-auto object-cover"
+            alt={article.seo.og_image_alt || article.title}
+            className="mb-10 w-full rounded-2xl"
+            width={1200}
+            height={630}
+            // The LCP element: never lazy-loaded.
+            fetchPriority="high"
           />
-        </div>
-      )}
+        )}
 
-      {/* Article content */}
-      <div className="mb-16">
-        <BlockRenderer blocks={article.content?.blocks || []} />
-      </div>
-    </article>
+        <AnnotationProvider annotations={article.annotations_index}>
+          <ServerBlockRenderer
+            blocks={article.content?.blocks ?? []}
+            annotations={article.annotations_index}
+          />
+          <AnnotationAppendix annotations={article.annotations_index} />
+        </AnnotationProvider>
+      </article>
+    </>
   );
 }
