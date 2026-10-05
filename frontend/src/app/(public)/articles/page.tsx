@@ -1,190 +1,180 @@
-"use client";
-
+import type { Metadata } from "next";
 import Link from "next/link";
-import { useEffect, useState, useCallback } from "react";
-import { Search, BookOpen, ChevronLeft, ChevronRight } from "lucide-react";
-import api from "@/lib/api";
-import { normalizeMediaUrl } from "@/lib/media";
-import { ArticleListItem, Category, PaginatedResponse } from "@/lib/types";
+import { ArrowLeft, ArrowRight } from "lucide-react";
+import { PageIntro, EmptyState } from "@/components/storyloom/Primitives";
 
-export default function ArticlesPage() {
-  const [articles, setArticles] = useState<ArticleListItem[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState("");
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
+import { ArticleCard } from "@/components/article/ArticleCard";
+import { ArticleFilters } from "@/components/article/islands/ArticleFilters";
+import { JsonLd } from "@/components/seo/JsonLd";
+import {
+  CmsError,
+  getCategoriesSafe,
+  getSiteSafe,
+  listArticles,
+} from "@/lib/api.server";
+import { articleListSchema } from "@/lib/schema";
+import { absoluteUrl, socialMetadata } from "@/lib/seo";
 
-  const fetchArticles = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const params = new URLSearchParams();
-      params.set("page", page.toString());
-      params.set("page_size", "9");
-      if (search) params.set("search", search);
-      if (selectedCategory) params.set("category", selectedCategory);
+/**
+ * Article index.
+ *
+ * Server-rendered, with filters driven by `searchParams` rather than component
+ * state. That matters for more than SSR: the previous version paginated with
+ * `<button>` elements, so pages 2+ had no crawlable URL at all and every
+ * article past the first page was unreachable to a crawler.
+ */
 
-      const response = await api.get<PaginatedResponse<ArticleListItem>>(
-        `/articles/?${params.toString()}`
-      );
-      setArticles(response.data.results);
-      setTotalPages(Math.ceil(response.data.count / 9));
-    } catch {
-      setArticles([]);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [page, search, selectedCategory]);
+export const revalidate = 300;
 
-  useEffect(() => {
-    fetchArticles();
-  }, [fetchArticles]);
+export async function generateMetadata(): Promise<Metadata> {
+  const site = await getSiteSafe();
+  const title = "Articles";
+  const description = `Browse every published article on ${site.site_title || site.name}.`;
+  const url = absoluteUrl("/articles", site.base_url);
+  const image = site.default_og_image || "/og/platform.jpg";
+  return {
+    title,
+    description,
+    alternates: { canonical: url },
+    ...socialMetadata({
+      title: `${title} | ${site.site_title || site.name}`,
+      description,
+      url,
+      image,
+      imageAlt: description,
+      locale: site.locale,
+      siteName: site.name,
+    }),
+  };
+}
 
-  useEffect(() => {
-    const fetchCategories = async () => {
-      try {
-        const response = await api.get("/categories/");
-        setCategories(response.data.results || response.data || []);
-      } catch {
-        // ignore
-      }
-    };
-    fetchCategories();
-  }, []);
+type SearchParams = {
+  q?: string;
+  category?: string;
+  cursor?: string;
+};
+
+export default async function ArticlesPage({
+  searchParams,
+}: {
+  // Next 15+ delivers this as a Promise; awaiting it is what makes the route
+  // dynamic at the point of access rather than for the whole segment.
+  searchParams: Promise<SearchParams>;
+}) {
+  const query = await searchParams;
+
+  const [page, categories, site] = await Promise.all([
+    listArticles({
+      q: query.q,
+      category: query.category,
+      cursor: query.cursor,
+      page_size: 9,
+    }).catch((error: unknown) => {
+      if (error instanceof CmsError || error instanceof TypeError) return null;
+      throw error;
+    }),
+    getCategoriesSafe(),
+    getSiteSafe(),
+  ]);
+
+  const buildHref = (cursor: string | null) => {
+    if (!cursor) return null;
+    const params = new URLSearchParams();
+    if (query.q) params.set("q", query.q);
+    if (query.category) params.set("category", query.category);
+    // The API returns absolute cursor URLs; keep only the opaque token.
+    const token = new URL(cursor, site.base_url).searchParams.get("cursor");
+    if (token) params.set("cursor", token);
+    return `/articles?${params.toString()}`;
+  };
+
+  const nextHref = buildHref(page?.next ?? null);
+  const prevHref = buildHref(page?.previous ?? null);
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-      {/* Page Header */}
-      <div className="text-center mb-12">
-        <h1 className="text-4xl font-bold text-slate-900 dark:text-white mb-4">All Articles</h1>
-        <p className="text-lg text-slate-500 dark:text-slate-400">
-          Explore our collection of interactive articles
-        </p>
-      </div>
+    <>
+      {page && (
+        <JsonLd data={articleListSchema(page.results, site, "Articles")} />
+      )}
 
-      {/* Filters */}
-      <div className="flex flex-col md:flex-row gap-4 mb-10">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
-          <input
-            type="text"
-            placeholder="Search articles..."
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
-            }}
-            className="input-field pl-10"
-          />
-        </div>
-        <select
-          value={selectedCategory}
-          onChange={(e) => {
-            setSelectedCategory(e.target.value);
-            setPage(1);
-          }}
-          className="input-field md:w-64"
+      <div className="sl-container sl-listing">
+        <PageIntro
+          eyebrow="THE STORYLOOM COLLECTION"
+          title="Good stories."
+          accent="Deeper discoveries."
+          description="Ideas worth your time. Perspectives worth exploring. Find your next read and discover what lies beneath the surface."
         >
-          <option value="">All Categories</option>
-          {categories.map((cat) => (
-            <option key={cat.id} value={cat.id}>
-              {cat.name}
-            </option>
-          ))}
-        </select>
-      </div>
+          <Link href="/categories" className="sl-text-link">
+            Explore by topic <ArrowRight size={16} />
+          </Link>
+        </PageIntro>
 
-      {/* Articles Grid */}
-      {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {[...Array(6)].map((_, i) => (
-            <div key={i} className="card animate-pulse">
-              <div className="h-48 bg-slate-200 dark:bg-slate-700 rounded-t-xl" />
-              <div className="p-6 space-y-3">
-                <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-1/4" />
-                <div className="h-5 bg-slate-200 dark:bg-slate-700 rounded w-3/4" />
-                <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-full" />
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : articles.length === 0 ? (
-        <div className="text-center py-20">
-          <BookOpen className="w-16 h-16 text-slate-300 dark:text-slate-600 mx-auto mb-4" />
-          <h3 className="text-xl font-semibold text-slate-600 dark:text-slate-400 mb-2">
-            No articles found
-          </h3>
-          <p className="text-slate-500 dark:text-slate-500">
-            Try adjusting your search or filter criteria
-          </p>
-        </div>
-      ) : (
-        <>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {articles.map((article) => (
-              <Link
+        <ArticleFilters
+          categories={categories.map((c) => ({ slug: c.slug, name: c.name }))}
+          activeCategory={query.category ?? ""}
+          query={query.q ?? ""}
+        />
+
+        {!page ? (
+          <EmptyState
+            title="The collection is temporarily unavailable."
+            description="We couldn’t load the articles. Please try again in a moment."
+            href="/articles"
+            action="Try again"
+          />
+        ) : page.results.length === 0 ? (
+          <EmptyState
+            title={
+              query.q || query.category
+                ? "No stories found. Keep exploring."
+                : "The next chapter is on its way."
+            }
+            description={
+              query.q || query.category
+                ? "Try another search or clear your filters to discover something new."
+                : "Published stories will appear here. Come back soon for a fresh perspective."
+            }
+            href={query.q || query.category ? "/articles" : "/categories"}
+            action={
+              query.q || query.category ? "Clear filters" : "Explore topics"
+            }
+          />
+        ) : (
+          <div className="sl-article-grid">
+            {page.results.map((article, index) => (
+              <ArticleCard
                 key={article.id}
-                href={`/articles/${article.slug}`}
-                className="card overflow-hidden group hover:shadow-xl transition-all hover:-translate-y-1"
-              >
-                {article.featured_image ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={normalizeMediaUrl(article.featured_image)}
-                    alt={article.title}
-                    className="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-300"
-                  />
-                ) : (
-                  <div className="w-full h-48 bg-gradient-to-br from-primary-100 to-accent-100 dark:from-primary-900/30 dark:to-accent-900/30 flex items-center justify-center">
-                    <BookOpen className="w-12 h-12 text-primary-400" />
-                  </div>
-                )}
-                <div className="p-6">
-                  {article.category && (
-                    <span className="inline-block px-3 py-1 rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 text-xs font-medium mb-3">
-                      {article.category.name}
-                    </span>
-                  )}
-                  <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2 line-clamp-2 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors">
-                    {article.title}
-                  </h3>
-                  <p className="text-sm text-slate-500 dark:text-slate-400 line-clamp-2 mb-4">
-                    {article.excerpt}
-                  </p>
-                  <div className="flex items-center justify-between text-xs text-slate-400 dark:text-slate-500">
-                    <span>{article.author.first_name || article.author.username}</span>
-                    <span>{article.reading_time} min read</span>
-                  </div>
-                </div>
-              </Link>
+                article={article}
+                priority={index === 0}
+              />
             ))}
           </div>
+        )}
 
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-center gap-2 mt-12">
-              <button
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="btn-secondary px-3 py-2"
+        {/* Real links, so pagination is crawlable and shareable. */}
+        {(nextHref || prevHref) && (
+          <nav className="sl-pagination" aria-label="Pagination">
+            {prevHref ? (
+              <Link
+                href={prevHref}
+                className="sl-button sl-button-outline"
+                rel="prev"
               >
-                <ChevronLeft size={18} />
-              </button>
-              <span className="px-4 py-2 text-sm text-slate-600 dark:text-slate-400">
-                Page {page} of {totalPages}
-              </span>
-              <button
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
-                className="btn-secondary px-3 py-2"
+                <ArrowLeft size={16} /> Previous
+              </Link>
+            ) : null}
+            {nextHref ? (
+              <Link
+                href={nextHref}
+                className="sl-button sl-button-outline"
+                rel="next"
               >
-                <ChevronRight size={18} />
-              </button>
-            </div>
-          )}
-        </>
-      )}
-    </div>
+                Next <ArrowRight size={16} />
+              </Link>
+            ) : null}
+          </nav>
+        )}
+      </div>
+    </>
   );
 }
