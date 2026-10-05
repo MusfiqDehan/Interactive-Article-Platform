@@ -1,3 +1,5 @@
+name: storyloom
+
 services:
   db:
     image: postgres:16-alpine
@@ -22,10 +24,16 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      args:
+        - INSTALL_DEV=true
+    image: storyloom-backend
     restart: unless-stopped
     env_file:
       - .env
     volumes:
+      # Dev-only source mount so code changes are picked up without a rebuild.
+      # The named volumes below mount deeper and therefore still win.
+      - ./backend:/app
       - backend_media:/app/media
       - backend_static:/app/staticfiles
     ports:
@@ -33,18 +41,146 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+      # Started, not waited on: search failing soft is a design property, and a
+      # hard dependency here would make a Meilisearch problem into a site
+      # outage -- exactly what apps/search is written to avoid.
+      meilisearch:
+        condition: service_started
+    healthcheck:
+      # Liveness only (database). Redis is checked by /readyz instead, so a
+      # cache outage does not get the container restarted.
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8003/healthz', timeout=5).status==200 else 1)\""]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    # Published on 6382 because the host already runs something on 6379.
+    # Bound to loopback only: this Redis is unauthenticated, so exposing it on
+    # 0.0.0.0 would be an open data store. Containers still reach it on 6379
+    # over the compose network.
+    ports:
+      - "127.0.0.1:6382:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.11
+    restart: unless-stopped
+    environment:
+      MEILI_MASTER_KEY: ${MEILISEARCH_MASTER_KEY:-dev-master-key-change-me}
+      MEILI_ENV: development
+      MEILI_NO_ANALYTICS: "true"
+    volumes:
+      - meili_data:/meili_data
+    # Published on 7701 rather than the default 7700 for the same reason Redis
+    # moved off 6379 -- and on loopback only. The browser reaches it through
+    # MEILISEARCH_PUBLIC_URL in a real deployment, not through this port.
+    ports:
+      - "127.0.0.1:7701:7700"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:7700/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      args:
+        - INSTALL_DEV=true
+    image: storyloom-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./backend:/app
+      - backend_media:/app/media
+    # Shares the backend image; only the command differs.
+    entrypoint: []
+    command: >
+      celery -A config worker
+      --loglevel=info
+      --queues=default,social,delivery,index
+      --concurrency=2
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      # Wait for migrate (in the backend entrypoint) so workers do not
+      # hit missing tables on a fresh volume.
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A config inspect ping -d celery@$$HOSTNAME || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  celery-beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      args:
+        - INSTALL_DEV=true
+    image: storyloom-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./backend:/app
+    entrypoint: []
+    # IMPORTANT: exactly one beat instance, ever. Two schedulers would fire
+    # every scheduled publish twice. The Redis lock inside the publish task is
+    # the second line of defence, not the first.
+    deploy:
+      replicas: 1
+    command: >
+      celery -A config beat
+      --loglevel=info
+      --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      # DatabaseScheduler queries django_celery_beat_* on boot. Those tables
+      # are created by the backend entrypoint's migrate, so starting beat
+      # against a healthy Postgres is not enough -- it races migrate and
+      # crashes with ProgrammingError on a fresh volume.
+      backend:
+        condition: service_healthy
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-      args:
-        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
-        - NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}
+    image: storyloom-frontend
     restart: unless-stopped
     environment:
-      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
-      - NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}
+      # Server-only, read at runtime. The internal URL keeps SSR fetches on the
+      # container network instead of routing back out through the public domain.
+      - CMS_INTERNAL_API_URL=http://backend:8003/api/v1
+      - CMS_SITE_API_KEY=${CMS_SITE_API_KEY:-}
+      - CMS_REVALIDATE_SECRET=${CMS_REVALIDATE_SECRET:-}
+      # Surfaced to the browser at request time via RuntimeConfigProvider.
+      - PUBLIC_SITE_URL=${PUBLIC_SITE_URL:-http://localhost:3003}
+      - PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}
+      - PUBLIC_SITE_SLUG=${PUBLIC_SITE_SLUG:-default}
     ports:
       - "3003:3003"
     depends_on:
@@ -52,5 +188,7 @@ services:
 
 volumes:
   postgres_data:
+  redis_data:
+  meili_data:
   backend_media:
   backend_static:
